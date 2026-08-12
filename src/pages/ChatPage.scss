@@ -340,9 +340,11 @@
       }
 
       .session-item {
-        border-bottom: 1px solid var(--border-color);
-        padding: 12px 16px;
-        transition: all 0.2s;
+        border-bottom: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        margin: 0 4px;
+        transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 
         &:hover {
           background: var(--bg-hover);
@@ -350,8 +352,8 @@
 
         &.active {
           background: var(--primary-light);
-          border-left: 3px solid var(--primary);
-          padding-left: 13px;
+          border-left: none;
+          padding-left: 14px;
         }
 
         .session-name {
@@ -367,14 +369,14 @@
 
         .session-summary {
           color: var(--text-secondary);
-          font-size: 12px;
+          font-size: 12.5px;
         }
       }
 
       .session-avatar {
-        border-radius: 50%;
-        width: 44px !important;
-        height: 44px !important;
+        border-radius: 10px;
+        width: 42px !important;
+        height: 42px !important;
       }
 
       .unread-badge {
@@ -456,10 +458,11 @@
         padding: 0 24px;
         padding-top: 38px;
         padding-bottom: 12px;
-        background: var(--card-bg);
-        border-bottom: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+        border-bottom: none;
         -webkit-app-region: drag;
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 70%, transparent);
 
         .session-avatar {
           width: 36px;
@@ -553,7 +556,7 @@
         padding: 8px 24px;
         font-size: 12px;
         color: var(--text-secondary);
-        border-bottom: 1px solid var(--border-color);
+        border-bottom: none;
         background: var(--bg-tertiary);
         -webkit-app-region: no-drag;
 
@@ -788,9 +791,11 @@
   max-width: 400px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
-  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .session-header {
@@ -1025,14 +1030,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   cursor: pointer;
-  transition: background 0.15s;
-  border-bottom: 1px solid var(--border-color);
-
-  &:last-child {
-    border-bottom: none;
-  }
+  border-bottom: none;
+  border-radius: 10px;
+  margin: 0 4px;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 
   &:hover {
     background: var(--bg-hover);
@@ -1044,9 +1047,9 @@
 }
 
 .session-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
@@ -1069,7 +1072,7 @@
 
   .avatar-letter {
     color: white;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
   }
 
@@ -1106,8 +1109,8 @@
 }
 
 .session-name {
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1116,7 +1119,7 @@
 }
 
 .session-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -1129,7 +1132,7 @@
 }
 
 .session-summary {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -1602,9 +1605,11 @@
   min-width: 0;
   min-height: 0;
   position: relative;
-  background: var(--bg-secondary);
-  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
   -webkit-app-region: no-drag;
 }
 
@@ -1613,7 +1618,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: none;
   -webkit-app-region: drag;
 
   .session-avatar {
@@ -2997,14 +3002,13 @@
   width: clamp(280px, 25vw, 360px);
   min-width: 280px;
   max-width: 360px;
-  background: var(--bg-primary);
-  border-left: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-  box-shadow: var(--shadow-sm);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, opacity;
 
   .detail-header {
     display: flex;
@@ -3012,12 +3016,13 @@
     justify-content: space-between;
     gap: 8px;
     padding: 14px 14px 12px;
-    background: var(--bg-primary);
-    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+    border-bottom: none;
     position: sticky;
     top: 0;
     z-index: 2;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 70%, transparent);
 
     .detail-title-wrap {
       min-width: 0;
@@ -3412,7 +3417,7 @@
 .group-members-panel {
   .group-members-toolbar {
     padding: 12px 16px 10px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -3458,8 +3463,10 @@
     padding: 6px 16px;
     font-size: 12px;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    border-bottom: none;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin: 0 8px;
 
     .spin {
       animation: spin 1s linear infinite;
@@ -3493,10 +3500,13 @@
     justify-content: space-between;
     gap: 8px;
     padding: 10px 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
+    border-radius: 8px;
+    margin: 0 4px;
+    transition: background 0.15s ease;
 
-    &:last-child {
-      border-bottom: none;
+    &:hover {
+      background: var(--bg-hover);
     }
   }
 
