@@ -273,10 +273,6 @@ function AnnualReportPage() {
 
   return (
     <div className={`annual-report-page ${isRouteTransitioning ? 'report-route-transitioning' : ''}`}>
-      <Sparkles size={32} className="header-icon" />
-      <h1 className="page-title">年度报告</h1>
-      <p className="page-desc">选择年份，回顾你在微信里的点点滴滴</p>
-
       <div className="report-sections">
         <section className="report-section">
           <div className="section-header">

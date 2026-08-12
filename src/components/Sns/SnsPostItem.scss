@@ -1,27 +1,29 @@
 :root {
-    --sns-card-bg: transparent;
-    --sns-border-radius-md: 8px;
-    --sns-border-radius-sm: 6px;
+    --sns-card-bg: var(--bg-secondary);
+    --sns-border-radius-lg: 12px;
+    --sns-border-radius-md: 10px;
+    --sns-border-radius-sm: 8px;
     --sns-media-cell: 88px;
 }
 
 .sns-post-item {
-    background: var(--sns-card-bg);
-    border: none;
-    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-    border-radius: 0;
-    box-shadow: none;
+    background: var(--card-bg, var(--sns-card-bg));
+    border: 1px solid var(--border-color);
+    border-radius: var(--sns-border-radius-lg);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     display: flex;
-    gap: 12px;
+    gap: 14px;
+    margin-bottom: 12px;
     overflow: visible;
-    padding: 10px 6px 12px;
+    padding: 16px;
     position: relative;
-    transition: background 0.15s ease;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 
     &:hover {
-        background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
-        box-shadow: none;
-        transform: none;
+        background: color-mix(in srgb, var(--bg-secondary) 96%, var(--primary) 4%);
+        border-color: rgba(var(--primary-rgb, 16, 163, 127), 0.35);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        transform: translateY(-1px);
     }
 
     &.post-deleted {
@@ -56,11 +58,12 @@
 
 .avatar-trigger {
     border-radius: var(--sns-border-radius-md);
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s ease, transform 0.15s ease;
 
     &:hover {
-        box-shadow: none;
-        opacity: 0.86;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        opacity: 0.9;
+        transform: scale(1.03);
     }
 
     &:focus-visible {
@@ -79,7 +82,7 @@
     display: flex;
     gap: 10px;
     justify-content: space-between;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
 
     .post-author-info {
         display: flex;
@@ -151,7 +154,7 @@
         justify-content: center;
         opacity: 0;
         padding: 0;
-        transition: opacity 0.2s;
+        transition: opacity 0.2s, background 0.15s, color 0.15s;
         width: 24px;
 
         &:hover {
@@ -194,9 +197,9 @@
 
 .post-text {
     color: var(--text-primary);
-    font-size: 14px;
-    line-height: 1.48;
-    margin: 0 0 8px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 0 0 10px;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -229,19 +232,20 @@
     align-items: center;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: var(--sns-border-radius-md);
+    border-radius: var(--sns-border-radius-sm);
     cursor: pointer;
     display: flex;
     gap: 10px;
-    margin-bottom: 8px;
-    padding: 8px;
+    margin-bottom: 10px;
+    padding: 10px;
     text-align: left;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: all 0.15s ease;
     width: 100%;
 
     &:hover {
-        background: rgba(var(--primary-rgb), 0.08);
-        border-color: rgba(var(--primary-rgb), 0.3);
+        background: color-mix(in srgb, var(--primary) 8%, var(--bg-tertiary));
+        border-color: rgba(var(--primary-rgb, 16, 163, 127), 0.35);
+        transform: translateY(-1px);
     }
 
     .link-thumb {
@@ -295,7 +299,7 @@
 .post-interactions {
     border-top: none;
     font-size: 12px;
-    margin-top: 8px;
+    margin-top: 10px;
     padding-top: 0;
 
     .likes-block {
@@ -304,21 +308,23 @@
         font-weight: 500;
         gap: 6px;
         margin-bottom: 6px;
+        align-items: center;
 
         .like-icon {
-            margin-top: 2px;
+            margin-top: 1px;
         }
     }
 
     .comments-block {
-        background: var(--bg-tertiary);
+        background: var(--bg-tertiary, var(--surface-raised, #2f2f2f));
+        border: 1px solid var(--border-color);
         border-radius: var(--sns-border-radius-sm);
-        padding: 6px 8px;
+        padding: 8px 12px;
 
         .comment-row {
             color: var(--text-secondary);
             line-height: 1.45;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
 
             &:last-child {
                 margin-bottom: 0;
@@ -326,7 +332,7 @@
 
             .comment-user {
                 color: var(--primary);
-                font-weight: 500;
+                font-weight: 600;
             }
 
             .reply-text {

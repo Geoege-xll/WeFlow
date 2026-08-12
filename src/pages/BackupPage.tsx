@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArchiveRestore, Database, Download, File, FileArchive, Image, Upload, Video } from 'lucide-react'
+import { ArchiveRestore, Database, Download, File, FileArchive, Hash, Image, Table, Upload, Video } from 'lucide-react'
+import { WeFlowCard, WeFlowPageContainer } from '../components/common'
 import './BackupPage.scss'
 
 type BackupManifest = NonNullable<Awaited<ReturnType<typeof window.electronAPI.backup.inspect>>['manifest']>
@@ -155,150 +156,172 @@ function BackupPage() {
   }
 
   return (
-    <div className="backup-page">
-      <div className="backup-header">
-        <div>
-          <h1>数据库备份</h1>
-          <p>Snapshots 增量备份与载入</p>
-        </div>
+    <WeFlowPageContainer
+      title="数据库备份"
+      className="backup-page-container"
+      headerActions={
         <div className="backup-actions">
-          <button className="primary-btn" onClick={handleCreateBackup} disabled={busy}>
-            <Download size={16} />
+          <button className="mac-pill-btn primary-btn" onClick={handleCreateBackup} disabled={busy}>
+            <Download size={15} />
             <span>创建备份</span>
           </button>
-          <button className="secondary-btn" onClick={handlePickArchive} disabled={busy}>
-            <FileArchive size={16} />
+          <button className="mac-pill-btn secondary-btn" onClick={handlePickArchive} disabled={busy}>
+            <FileArchive size={15} />
             <span>选择备份</span>
           </button>
-          <button className="secondary-btn" onClick={handleRestore} disabled={busy || !selectedArchive}>
-            <Upload size={16} />
+          <button className="mac-pill-btn secondary-btn" onClick={handleRestore} disabled={busy || !selectedArchive}>
+            <Upload size={15} />
             <span>载入</span>
           </button>
         </div>
-      </div>
-
-      <section className="resource-options" aria-label="资源备份选项">
-        <label>
-          <input
-            type="checkbox"
-            checked={resourceOptions.includeImages}
-            disabled={busy}
-            onChange={(event) => setResourceOptions(prev => ({ ...prev, includeImages: event.target.checked }))}
-          />
-          <Image size={16} />
-          <span>图片</span>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={resourceOptions.includeVideos}
-            disabled={busy}
-            onChange={(event) => setResourceOptions(prev => ({ ...prev, includeVideos: event.target.checked }))}
-          />
-          <Video size={16} />
-          <span>视频</span>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={resourceOptions.includeFiles}
-            disabled={busy}
-            onChange={(event) => setResourceOptions(prev => ({ ...prev, includeFiles: event.target.checked }))}
-          />
-          <File size={16} />
-          <span>文件</span>
-        </label>
-      </section>
-
-      <div className="backup-status-band">
-        <div className="status-icon">
-          <ArchiveRestore size={22} />
-        </div>
-        <div className="status-body">
-          <div className="status-title">{progress?.message || message || '等待操作'}</div>
-          <div className="status-detail">{progress?.detail || selectedArchive || '未选择备份包'}</div>
-          {busy && (
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${percent}%` }} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <section className="backup-summary">
-        <div className="summary-item">
-          <Database size={18} />
-          <span>数据库</span>
-          <strong>{summary.dbCount}</strong>
-        </div>
-        <div className="summary-item">
-          <Database size={18} />
-          <span>表</span>
-          <strong>{summary.tableCount}</strong>
-        </div>
-        <div className="summary-item">
-          <Database size={18} />
-          <span>行</span>
-          <strong>{summary.rowCount.toLocaleString()}</strong>
-        </div>
-        <div className="summary-item">
-          <FileArchive size={18} />
-          <span>资源</span>
-          <strong>{summary.resourceCount.toLocaleString()}</strong>
-        </div>
-      </section>
-
-      {manifest && (
-        <section className="backup-detail">
-          <div className="detail-heading">
-            <h2>备份信息</h2>
-            <span>{formatDate(manifest.createdAt)}</span>
+      }
+    >
+      <div className="backup-page-content">
+        <WeFlowCard className="resource-options-group" aria-label="资源备份选项">
+          <div className="group-label">资源备份选项</div>
+          <div className="capsule-checkbox-group">
+            <label className={`capsule-checkbox ${resourceOptions.includeImages ? 'is-checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={resourceOptions.includeImages}
+                disabled={busy}
+                onChange={(event) => setResourceOptions(prev => ({ ...prev, includeImages: event.target.checked }))}
+              />
+              <Image size={16} className="capsule-icon" />
+              <span>图片</span>
+            </label>
+            <label className={`capsule-checkbox ${resourceOptions.includeVideos ? 'is-checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={resourceOptions.includeVideos}
+                disabled={busy}
+                onChange={(event) => setResourceOptions(prev => ({ ...prev, includeVideos: event.target.checked }))}
+              />
+              <Video size={16} className="capsule-icon" />
+              <span>视频</span>
+            </label>
+            <label className={`capsule-checkbox ${resourceOptions.includeFiles ? 'is-checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={resourceOptions.includeFiles}
+                disabled={busy}
+                onChange={(event) => setResourceOptions(prev => ({ ...prev, includeFiles: event.target.checked }))}
+              />
+              <File size={16} className="capsule-icon" />
+              <span>文件</span>
+            </label>
           </div>
-          <div className="detail-grid">
-            <div>
-              <span>来源账号</span>
-              <strong>{manifest.source.wxid || '-'}</strong>
-            </div>
-            <div>
-              <span>版本</span>
-              <strong>{manifest.appVersion || '-'}</strong>
-            </div>
-            <div>
-              <span>资源</span>
-              <strong>
-                图片 {manifest.resources?.images?.length || 0} / 视频 {manifest.resources?.videos?.length || 0} / 文件 {manifest.resources?.files?.length || 0}
-              </strong>
-            </div>
+        </WeFlowCard>
+
+        <WeFlowCard className="backup-status-card">
+          <div className="status-badge">
+            <ArchiveRestore size={20} />
           </div>
-          <div className="db-list">
-            {manifest.databases.map(db => (
-              <div className="db-row" key={db.id}>
-                <span>{db.kind}</span>
-                <strong>{db.tables.length} 表</strong>
-                <em>{db.relativePath}</em>
+          <div className="status-content">
+            <div className="status-title">{progress?.message || message || '等待操作'}</div>
+            <div className="status-subtitle">{progress?.detail || selectedArchive || '未选择备份包'}</div>
+            {busy && (
+              <div className="status-progress-track">
+                <div className="status-progress-fill" style={{ width: `${percent}%` }} />
               </div>
-            ))}
+            )}
           </div>
-        </section>
-      )}
+        </WeFlowCard>
 
-      {restoreSummary && (
-        <section className="restore-result">
-          <div>
-            <span>新增</span>
-            <strong>{restoreSummary.inserted.toLocaleString()}</strong>
+        <div className="backup-summary-grid">
+          <WeFlowCard hoverElastic className="stat-card">
+            <div className="stat-header">
+              <div className="stat-icon-badge">
+                <Database size={18} />
+              </div>
+              <span className="stat-label">数据库</span>
+            </div>
+            <div className="stat-value">{summary.dbCount}</div>
+          </WeFlowCard>
+
+          <WeFlowCard hoverElastic className="stat-card">
+            <div className="stat-header">
+              <div className="stat-icon-badge">
+                <Table size={18} />
+              </div>
+              <span className="stat-label">表</span>
+            </div>
+            <div className="stat-value">{summary.tableCount}</div>
+          </WeFlowCard>
+
+          <WeFlowCard hoverElastic className="stat-card">
+            <div className="stat-header">
+              <div className="stat-icon-badge">
+                <Hash size={18} />
+              </div>
+              <span className="stat-label">增量行</span>
+            </div>
+            <div className="stat-value">{summary.rowCount.toLocaleString()}</div>
+          </WeFlowCard>
+
+          <WeFlowCard hoverElastic className="stat-card">
+            <div className="stat-header">
+              <div className="stat-icon-badge">
+                <FileArchive size={18} />
+              </div>
+              <span className="stat-label">资源文件</span>
+            </div>
+            <div className="stat-value">{summary.resourceCount.toLocaleString()}</div>
+          </WeFlowCard>
+        </div>
+
+        {manifest && (
+          <WeFlowCard className="backup-manifest-card">
+            <div className="manifest-header">
+              <h2 className="manifest-title">备份清册明细</h2>
+              <span className="manifest-date">{formatDate(manifest.createdAt)}</span>
+            </div>
+            <div className="manifest-subcards-grid">
+              <div className="subcard">
+                <span className="subcard-label">来源账号</span>
+                <strong className="subcard-value">{manifest.source.wxid || '-'}</strong>
+              </div>
+              <div className="subcard">
+                <span className="subcard-label">版本</span>
+                <strong className="subcard-value">{manifest.appVersion || '-'}</strong>
+              </div>
+              <div className="subcard full-width">
+                <span className="subcard-label">资源</span>
+                <strong className="subcard-value">
+                  图片 {manifest.resources?.images?.length || 0} / 视频 {manifest.resources?.videos?.length || 0} / 文件 {manifest.resources?.files?.length || 0}
+                </strong>
+              </div>
+            </div>
+            <div className="db-list">
+              {manifest.databases.map(db => (
+                <div className="db-row-item" key={db.id}>
+                  <span className="db-kind-badge">{db.kind}</span>
+                  <strong className="db-table-count">{db.tables.length} 表</strong>
+                  <span className="db-rel-path">{db.relativePath}</span>
+                </div>
+              ))}
+            </div>
+          </WeFlowCard>
+        )}
+
+        {restoreSummary && (
+          <div className="restore-result-grid">
+            <WeFlowCard hoverElastic className="stat-card">
+              <span className="stat-label">新增</span>
+              <strong className="stat-value">{restoreSummary.inserted.toLocaleString()}</strong>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="stat-card">
+              <span className="stat-label">已存在</span>
+              <strong className="stat-value">{restoreSummary.ignored.toLocaleString()}</strong>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="stat-card">
+              <span className="stat-label">跳过</span>
+              <strong className="stat-value">{restoreSummary.skipped.toLocaleString()}</strong>
+            </WeFlowCard>
           </div>
-          <div>
-            <span>已存在</span>
-            <strong>{restoreSummary.ignored.toLocaleString()}</strong>
-          </div>
-          <div>
-            <span>跳过</span>
-            <strong>{restoreSummary.skipped.toLocaleString()}</strong>
-          </div>
-        </section>
-      )}
-    </div>
+        )}
+      </div>
+    </WeFlowPageContainer>
   )
 }
 

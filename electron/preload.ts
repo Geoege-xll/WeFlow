@@ -7,11 +7,42 @@ type CloseConfirmPayload = {
 
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
+  // === OMNIMIND HOOK ===
+  omniMind: {
+    getSnapshot: () => ipcRenderer.invoke('omnimind:getSnapshot'),
+    getSettings: () => ipcRenderer.invoke('omnimind:getSettings'),
+    saveSettings: (payload: unknown) => ipcRenderer.invoke('omnimind:saveSettings', payload),
+    testConnection: (payload: unknown) => ipcRenderer.invoke('omnimind:testConnection', payload),
+    clearApiKey: () => ipcRenderer.invoke('omnimind:clearApiKey', {}),
+    enable: () => ipcRenderer.invoke('omnimind:enable', {}),
+    disable: () => ipcRenderer.invoke('omnimind:disable', {}),
+    sendManual: (payload: unknown) => ipcRenderer.invoke('omnimind:sendManual', payload),
+    cancelTask: (taskId: string) => ipcRenderer.invoke('omnimind:cancelTask', { taskId }),
+    retryTask: (taskId: string) => ipcRenderer.invoke('omnimind:retryTask', { taskId }),
+    sendGeneratedReply: (taskId: string) => ipcRenderer.invoke('omnimind:sendGeneratedReply', { taskId }),
+    abandonGeneratedReply: (taskId: string) => ipcRenderer.invoke('omnimind:abandonGeneratedReply', { taskId }),
+    getPermissions: () => ipcRenderer.invoke('omnimind:getPermissions', {}),
+    requestPermission: (permission: 'accessibility' | 'automation') => ipcRenderer.invoke('omnimind:requestPermission', { permission }),
+    recheckPermission: (permission: 'accessibility' | 'automation') => ipcRenderer.invoke('omnimind:recheckPermission', { permission }),
+    openPermissionSettings: (permission: 'accessibility' | 'automation') => ipcRenderer.invoke('omnimind:openPermissionSettings', { permission }),
+    onSnapshotChanged: (callback: (snapshot: unknown) => void) => {
+      const listener = (_event: unknown, snapshot: unknown) => callback(snapshot)
+      ipcRenderer.on('omnimind:snapshotChanged', listener)
+      return () => ipcRenderer.removeListener('omnimind:snapshotChanged', listener)
+    },
+    onPermissionsChanged: (callback: (event: unknown) => void) => {
+      const listener = (_event: unknown, permissionEvent: unknown) => callback(permissionEvent)
+      ipcRenderer.on('omnimind:permissionsChanged', listener)
+      return () => ipcRenderer.removeListener('omnimind:permissionsChanged', listener)
+    }
+  },
   // 配置
   config: {
     get: (key: string) => ipcRenderer.invoke('config:get', key),
     set: (key: string, value: any) => ipcRenderer.invoke('config:set', key, value),
-    clear: () => ipcRenderer.invoke('config:clear')
+    clear: () => ipcRenderer.invoke('config:clear'),
+    setAccountBundle: (bundle: unknown) => ipcRenderer.invoke('account:setBundle', bundle),
+    patchAccountBundle: (patch: unknown) => ipcRenderer.invoke('account:patchBundle', patch)
   },
 
   // 通知

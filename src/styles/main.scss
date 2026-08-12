@@ -7,6 +7,34 @@
 // =============================================
 :root,
 [data-mode="light"] {
+  // ---- Semantic Layers ----
+  --layer-shell: 1000;
+  --layer-popover: 2000;
+  --layer-modal: 3000;
+  --layer-critical: 4000;
+
+  // ---- Typography Scale ----
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-base: 13px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 18px;
+  --font-2xl: 22px;
+
+  --line-height-xs: 1.3;
+  --line-height-sm: 1.4;
+  --line-height-base: 1.5;
+  --line-height-md: 1.5;
+  --line-height-lg: 1.4;
+  --line-height-xl: 1.3;
+  --line-height-2xl: 1.2;
+
+  // ---- Glass System ----
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-card-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(0, 0, 0, 0.08);
+
   // ---- Accent / Brand (default = ChatGPT green) ----
   --primary: #10a37f;
   --primary-rgb: 16, 163, 127;
@@ -48,7 +76,7 @@
   --on-primary: #ffffff;
 
   // ---- Layout ----
-  --sidebar-width: 200px;
+  --sidebar-width: 240px;
 
   // ---- Gold Premium Theme ----
   --gold-start: #c3aa87;
@@ -63,6 +91,28 @@
 // Dark mode
 // =============================================
 [data-mode="dark"] {
+  // ---- Typography Scale (inherits font sizes, line heights) ----
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-base: 13px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 18px;
+  --font-2xl: 22px;
+
+  --line-height-xs: 1.3;
+  --line-height-sm: 1.4;
+  --line-height-base: 1.5;
+  --line-height-md: 1.5;
+  --line-height-lg: 1.4;
+  --line-height-xl: 1.3;
+  --line-height-2xl: 1.2;
+
+  // ---- Glass System ----
+  --glass-bg: rgba(33, 33, 33, 0.7);
+  --glass-card-bg: rgba(47, 47, 47, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
   --primary: #10a37f;
   --primary-rgb: 16, 163, 127;
   --primary-hover: #1ab893;

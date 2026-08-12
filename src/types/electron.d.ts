@@ -1,5 +1,7 @@
 ﻿import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
+import type { OmniMindPermissionKind, OmniMindPermissionReturnEvent, OmniMindPermissionSnapshot, OmniMindSendResult, OmniMindSettings, OmniMindSettingsInput, OmniMindSnapshot } from '../../shared/omnimind/contracts'
+
 export interface SessionChatWindowOpenOptions {
   source?: 'chat' | 'export'
   initialDisplayName?: string
@@ -314,6 +316,30 @@ export type CloseConfirmPayload = {
 }
 
 export interface ElectronAPI {
+  process: {
+    platform: string
+    arch: string
+  }
+  omniMind: {
+    getSnapshot: () => Promise<OmniMindSnapshot>
+    getSettings: () => Promise<OmniMindSettings>
+    saveSettings: (payload: OmniMindSettingsInput) => Promise<void>
+    testConnection: (payload: { pythonBaseUrl: string; apiKeyDraft?: string }) => Promise<{ success: boolean; kind?: string; latencyMs?: number }>
+    clearApiKey: () => Promise<void>
+    enable: () => Promise<OmniMindSnapshot>
+    disable: () => Promise<OmniMindSnapshot>
+    sendManual: (payload: { sessionId: string; text: string }) => Promise<OmniMindSendResult>
+    cancelTask: (taskId: string) => Promise<boolean>
+    retryTask: (taskId: string) => Promise<unknown>
+    sendGeneratedReply: (taskId: string) => Promise<OmniMindSendResult>
+    abandonGeneratedReply: (taskId: string) => Promise<boolean>
+    getPermissions: () => Promise<OmniMindPermissionSnapshot>
+    requestPermission: (permission: OmniMindPermissionKind) => Promise<OmniMindPermissionSnapshot>
+    recheckPermission: (permission: OmniMindPermissionKind) => Promise<OmniMindPermissionSnapshot>
+    openPermissionSettings: (permission: OmniMindPermissionKind) => Promise<void>
+    onSnapshotChanged: (callback: (snapshot: OmniMindSnapshot) => void) => () => void
+    onPermissionsChanged: (callback: (event: OmniMindPermissionReturnEvent) => void) => () => void
+  }
   window: {
     minimize: () => void
     maximize: () => void
@@ -338,6 +364,8 @@ export interface ElectronAPI {
     get: (key: string) => Promise<unknown>
     set: (key: string, value: unknown) => Promise<void>
     clear: () => Promise<boolean>
+    setAccountBundle: (bundle: import('../../shared/omnimind/account-bundle').AccountConfigBundle) => Promise<void>
+    patchAccountBundle: (patch: import('../../shared/omnimind/account-bundle').AccountConfigPatchPayload) => Promise<void>
   }
   auth: {
     hello: (message?: string) => Promise<{ success: boolean; error?: string }>

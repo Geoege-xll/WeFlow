@@ -16,22 +16,39 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.window-drag-region {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 48px;
-  app-region: drag;
-  -webkit-app-region: drag;
-  pointer-events: auto;
-  z-index: 2000;
+.mac-split-view-container {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
 }
 
 .main-layout {
   flex: 1;
   display: flex;
   overflow: hidden;
+}
+
+.sidebar-detail-separator {
+  width: 1px;
+  flex: 0 0 1px;
+  height: 100%;
+  background: var(--border-color);
+  pointer-events: none;
+  user-select: none;
+}
+
+.detail-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .content {
@@ -42,20 +59,28 @@
   background: var(--bg-primary);
   border-top-left-radius: 16px; /* 为主内容区域左上角添加优雅的圆角过渡 */
   border-bottom-left-radius: 16px; /* 为主内容区域左下角添加优雅的圆角过渡 */
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.03); /* 侧边栏与主内容区域交界处的微弱阴影过渡 */
   
   // 增加平滑的背景渐变，与最外层容器形成柔和的过渡，消除生硬感
   background: radial-gradient(circle at center, var(--bg-primary) 0%, var(--bg-secondary) 100%);
 }
 
 [data-mode="dark"] .content {
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25); /* 深色模式下更深邃的阴影过渡 */
-  border-left: 1px solid rgba(255, 255, 255, 0.03); /* 极细的微光边界线 */
   background: radial-gradient(circle at center, #1c1c1e 0%, #151516 100%); /* 调配深邃且柔和的黑金底色过渡 */
+}
+
+// Pages migrated to WeFlowPageContainer own their detail scrolling and insets.
+.content.native-detail-container {
+  overflow: hidden;
+  padding: 0;
+  border-radius: 0;
+  border-left: none;
+  box-shadow: none;
+  background: var(--bg-primary);
 }
 
 .export-keepalive-page {
   height: 100%;
+  overflow: hidden;
 
   &.hidden {
     display: none;

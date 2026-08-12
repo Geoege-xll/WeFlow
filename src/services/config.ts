@@ -2,6 +2,7 @@
 import { config } from './ipc'
 import type { ExportDefaultDateRangeConfig } from '../utils/exportDateRange'
 import type { ExportAutomationTask } from '../types/exportAutomation'
+import type { AccountConfigBundle, AccountConfigPatch } from '../../shared/omnimind/account-bundle'
 
 // 配置键名
 export const CONFIG_KEYS = {
@@ -187,7 +188,7 @@ export async function getDecryptKey(): Promise<string | null> {
 
 // 设置解密密钥
 export async function setDecryptKey(key: string): Promise<void> {
-  await config.set(CONFIG_KEYS.DECRYPT_KEY, key)
+  await patchAccountBundle({ decryptKey: key })
 }
 
 // 获取数据库路径
@@ -209,7 +210,7 @@ export async function setHttpApiToken(token: string): Promise<void> {
 
 // 设置数据库路径
 export async function setDbPath(path: string): Promise<void> {
-  await config.set(CONFIG_KEYS.DB_PATH, path)
+  await patchAccountBundle({ dbPath: path })
 }
 
 // 清洗账号目录名称（移除后缀）
@@ -245,7 +246,19 @@ export async function getMyWxidCleaned(): Promise<string | null> {
 
 // 设置当前用户 wxid
 export async function setMyWxid(wxid: string): Promise<void> {
-  await config.set(CONFIG_KEYS.MY_WXID, wxid)
+  await patchAccountBundle(wxid ? { myWxid: wxid } : {
+    myWxid: '', dbPath: '', decryptKey: '', imageXorKey: 0, imageAesKey: '', lastOpenedDb: ''
+  })
+}
+
+export async function setAccountBundle(input: Partial<AccountConfigBundle> & Pick<AccountConfigBundle, 'myWxid'>): Promise<void> {
+  const keys: Array<keyof AccountConfigBundle> = ['myWxid', 'dbPath', 'decryptKey', 'imageXorKey', 'imageAesKey', 'cachePath', 'lastOpenedDb']
+  if (keys.every((key) => input[key] !== undefined)) await window.electronAPI.config.setAccountBundle(input as AccountConfigBundle)
+  else await patchAccountBundle(input)
+}
+
+export async function patchAccountBundle(input: AccountConfigPatch, expectedAccountId?: string): Promise<void> {
+  await window.electronAPI.config.patchAccountBundle({ ...input, ...(expectedAccountId !== undefined ? { expectedAccountId } : {}) })
 }
 
 export async function getWxidConfigs(): Promise<Record<string, WxidConfig>> {
@@ -441,7 +454,7 @@ export async function getImageXorKey(): Promise<number | null> {
 
 // 设置图片 XOR 密钥
 export async function setImageXorKey(key: number): Promise<void> {
-  await config.set(CONFIG_KEYS.IMAGE_XOR_KEY, key)
+  await patchAccountBundle({ imageXorKey: key })
 }
 
 // 获取图片 AES 密钥
@@ -452,7 +465,7 @@ export async function getImageAesKey(): Promise<string | null> {
 
 // 设置图片 AES 密钥
 export async function setImageAesKey(key: string): Promise<void> {
-  await config.set(CONFIG_KEYS.IMAGE_AES_KEY, key)
+  await patchAccountBundle({ imageAesKey: key })
 }
 
 // 获取是否完成首次配置引导
@@ -2360,4 +2373,3 @@ export async function setAutoDownloadWhitelist(list: string[]): Promise<void> {
   const normalized = Array.from(new Set((list || []).map(item => String(item || '').trim()).filter(Boolean)))
   await config.set(CONFIG_KEYS.AUTO_DOWNLOAD_WHITELIST, normalized)
 }
-

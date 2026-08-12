@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, AtSign, CheckCircle2, Download, Loader2, MessageCircle, RefreshCw, Search, Sparkles, Users } from 'lucide-react'
+import { AlertCircle, AtSign, CheckCircle2, Download, Loader2, MessageCircle, RefreshCw, Sparkles, Users } from 'lucide-react'
 import DateRangePicker from '../components/DateRangePicker'
+import { WeFlowCard, WeFlowDialog, WeFlowSearch } from '../components/common'
 import './MyFootprintPage.scss'
 
 type RangePreset = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'custom'
@@ -679,11 +680,6 @@ function MyFootprintPage() {
   return (
     <div className="my-footprint-page">
       <section className="footprint-header">
-        <div className="footprint-title-wrap">
-          <h1>我的微信足迹</h1>
-          <p>范围：{currentRange.label}</p>
-        </div>
-
         <div className="footprint-toolbar">
           <div className="range-preset-group">
             {[
@@ -716,14 +712,12 @@ function MyFootprintPage() {
           )}
 
           <div className="toolbar-actions">
-            <div className="search-input">
-              <Search size={15} />
-              <input
-                value={searchKeyword}
-                onChange={(event) => setSearchKeyword(event.target.value)}
-                placeholder="搜索联系人/群聊/内容"
-              />
-            </div>
+            <WeFlowSearch
+              value={searchKeyword}
+              onChange={setSearchKeyword}
+              placeholder="搜索联系人/群聊/内容"
+              size="sm"
+            />
             <button type="button" className="action-btn" onClick={() => void loadData()} disabled={loading}>
               <RefreshCw size={15} className={loading ? 'spin' : ''} />
               <span>刷新</span>
@@ -769,36 +763,36 @@ function MyFootprintPage() {
       ) : (
         <>
           <section className="kpi-grid">
-            <button type="button" className="kpi-card" onClick={() => setTimelineMode('private')}>
+            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
               <span className="kpi-label">收到消息的人数</span>
               <strong>{data.summary.private_inbound_people}</strong>
               <small>回复了其中 {data.summary.private_replied_people} 人</small>
-            </button>
-            <button type="button" className="kpi-card" onClick={() => setTimelineMode('private')}>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
               <span className="kpi-label">发送消息的人数</span>
               <strong>{data.summary.private_outbound_people}</strong>
               <small>回复率 {formatPercent(data.summary.private_reply_rate)}</small>
-            </button>
-            <button type="button" className="kpi-card" onClick={() => setTimelineMode('mention')}>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
               <span className="kpi-label">@我次数</span>
               <strong>{data.summary.mention_count}</strong>
               <small>可点击查看原消息</small>
-            </button>
-            <button type="button" className="kpi-card" onClick={() => setTimelineMode('mention')}>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
               <span className="kpi-label">涉及群聊</span>
               <strong>{data.summary.mention_group_count}</strong>
               <small>按群聚合 @我消息</small>
-            </button>
+            </WeFlowCard>
           </section>
 
           {footprintAiStatus !== 'idle' && (
-            <section className={`footprint-ai-result footprint-ai-result-${footprintAiStatus}`}>
+            <WeFlowCard className={`footprint-ai-result footprint-ai-result-${footprintAiStatus}`}>
               <div className="footprint-ai-head">
                 <strong>AI 足迹总结</strong>
                 <span>{currentRange.label}</span>
               </div>
               <p>{footprintAiText}</p>
-            </section>
+            </WeFlowCard>
           )}
 
           <section
@@ -946,36 +940,46 @@ function MyFootprintPage() {
           </section>
         </>
       )}
-      {exportModalStatus !== 'idle' && (
-        <div className="footprint-export-modal-mask" role="presentation">
-          <div className="footprint-export-modal" role="dialog" aria-modal="true" aria-live="polite">
-            <div className={`export-modal-icon export-modal-icon-${exportModalStatus}`}>
-              {exportModalStatus === 'progress' && <RefreshCw size={20} className="spin" />}
-              {exportModalStatus === 'success' && <CheckCircle2 size={20} />}
-              {exportModalStatus === 'error' && <AlertCircle size={20} />}
+      <WeFlowDialog
+        open={exportModalStatus !== 'idle'}
+        onClose={() => {
+          if (exportModalStatus !== 'progress') {
+            setExportModalStatus('idle')
+            setExportModalTitle('')
+            setExportModalDescription('')
+            setExportModalPath('')
+          }
+        }}
+        title={exportModalTitle}
+        footer={
+          exportModalStatus !== 'progress' && (
+            <div className="export-modal-actions">
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => {
+                  setExportModalStatus('idle')
+                  setExportModalTitle('')
+                  setExportModalDescription('')
+                  setExportModalPath('')
+                }}
+              >
+                知道了
+              </button>
             </div>
-            <h3>{exportModalTitle}</h3>
-            <p>{exportModalDescription}</p>
-            {exportModalPath && <code className="export-modal-path">{exportModalPath}</code>}
-            {exportModalStatus !== 'progress' && (
-              <div className="export-modal-actions">
-                <button
-                  type="button"
-                  className="action-btn"
-                  onClick={() => {
-                    setExportModalStatus('idle')
-                    setExportModalTitle('')
-                    setExportModalDescription('')
-                    setExportModalPath('')
-                  }}
-                >
-                  知道了
-                </button>
-              </div>
-            )}
+          )
+        }
+      >
+        <div className="footprint-export-modal-body">
+          <div className={`export-modal-icon export-modal-icon-${exportModalStatus}`}>
+            {exportModalStatus === 'progress' && <RefreshCw size={20} className="spin" />}
+            {exportModalStatus === 'success' && <CheckCircle2 size={20} />}
+            {exportModalStatus === 'error' && <AlertCircle size={20} />}
           </div>
+          <p>{exportModalDescription}</p>
+          {exportModalPath && <code className="export-modal-path">{exportModalPath}</code>}
         </div>
-      )}
+      </WeFlowDialog>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, ChevronRight, Database, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
@@ -17,7 +17,6 @@ interface SidebarUserProfile {
 const SIDEBAR_USER_PROFILE_CACHE_KEY = 'sidebar_user_profile_cache_v1'
 const ACCOUNT_PROFILES_CACHE_KEY = 'account_profiles_cache_v1'
 const DEFAULT_DISPLAY_NAME = '微信用户'
-const DEFAULT_SUBTITLE = '微信账号'
 
 interface SidebarUserProfileCache extends SidebarUserProfile {
   updatedAt: number
@@ -95,6 +94,12 @@ const normalizeAccountId = (value?: string | null): string => {
   return suffixMatch ? suffixMatch[1] : trimmed
 }
 
+const getDatabaseBasename = (path: string | null): string => {
+  const normalized = String(path || '').trim().replace(/[\\/]+$/, '')
+  if (!normalized) return '当前数据库'
+  return normalized.split(/[\\/]/).filter(Boolean).pop() || '当前数据库'
+}
+
 interface SidebarProps {
   collapsed: boolean
 }
@@ -110,6 +115,10 @@ function Sidebar({ collapsed }: SidebarProps) {
   })
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const accountCardWrapRef = useRef<HTMLDivElement | null>(null)
+  const accountTriggerRef = useRef<HTMLDivElement | null>(null)
+  const firstAccountMenuItemRef = useRef<HTMLButtonElement | null>(null)
+  const isDbConnected = useAppStore(state => state.isDbConnected)
+  const dbPath = useAppStore(state => state.dbPath)
   const setLocked = useAppStore(state => state.setLocked)
 
   useEffect(() => {
@@ -126,6 +135,20 @@ function Sidebar({ collapsed }: SidebarProps) {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isAccountMenuOpen])
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return
+
+    firstAccountMenuItemRef.current?.focus()
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setIsAccountMenuOpen(false)
+      accountTriggerRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
   }, [isAccountMenuOpen])
 
   useEffect(() => {
@@ -310,130 +333,234 @@ function Sidebar({ collapsed }: SidebarProps) {
   }
   const exportTaskBadge = activeExportTaskCount > 99 ? '99+' : `${activeExportTaskCount}`
   const lockActionLabel = authEnabled ? '锁定应用' : '开启应用锁'
+  const databaseBasename = getDatabaseBasename(dbPath)
+  const databaseStatusLabel = isDbConnected
+    ? `微信已绑定：${databaseBasename}`
+    : '微信未绑定，点击配置'
+
+  const openDatabaseSettings = (): void => {
+    navigate('/settings', {
+      state: {
+        initialTab: 'database',
+        backgroundLocation: location
+      }
+    })
+  }
 
   return (
     <>
-      <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <nav className="nav-menu">
-          {/* 首页 */}
-          <NavLink
-            to="/home"
-            className={`nav-item ${isActive('/home') ? 'active' : ''}`}
-            title={collapsed ? '首页' : undefined}
+      <aside
+        className={`sidebar ${collapsed ? 'collapsed' : ''}`}
+      >
+        {/* Sidebar Header: Database Status + User Profile Card */}
+        <div className="sidebar-header">
+          <button
+            type="button"
+            className={`sidebar-database-status ${isDbConnected ? 'connected' : 'disconnected'}`}
+            onClick={openDatabaseSettings}
+            aria-label={databaseStatusLabel}
+            title={databaseStatusLabel}
           >
-            <span className="nav-icon"><Home size={20} /></span>
-            <span className="nav-label">首页</span>
-          </NavLink>
-
-          {/* 聊天 */}
-          <NavLink
-            to="/chat"
-            className={`nav-item ${isActive('/chat') ? 'active' : ''}`}
-            title={collapsed ? '聊天' : undefined}
-          >
-            <span className="nav-icon"><MessageSquare size={20} /></span>
-            <span className="nav-label">聊天</span>
-          </NavLink>
-
-          {/* 朋友圈 */}
-          <NavLink
-            to="/sns"
-            className={`nav-item ${isActive('/sns') ? 'active' : ''}`}
-            title={collapsed ? '朋友圈' : undefined}
-          >
-            <span className="nav-icon"><Aperture size={20} /></span>
-            <span className="nav-label">朋友圈</span>
-          </NavLink>
-
-          <NavLink
-            to="/insight-inbox"
-            className={`nav-item ${isActive('/insight-inbox') ? 'active' : ''}`}
-            title={collapsed ? '灵感信箱' : undefined}
-          >
-            <span className="nav-icon"><Sparkles size={20} /></span>
-            <span className="nav-label">灵感信箱</span>
-          </NavLink>
-
-          {/* 通讯录 */}
-          <NavLink
-            to="/contacts"
-            className={`nav-item ${isActive('/contacts') ? 'active' : ''}`}
-            title={collapsed ? '通讯录' : undefined}
-          >
-            <span className="nav-icon"><UserCircle size={20} /></span>
-            <span className="nav-label">通讯录</span>
-          </NavLink>
-
-          {/* 资源浏览 */}
-          <NavLink
-            to="/resources"
-            className={`nav-item ${isActive('/resources') ? 'active' : ''}`}
-            title={collapsed ? '资源浏览' : undefined}
-          >
-            <span className="nav-icon"><FolderClosed size={20} /></span>
-            <span className="nav-label">资源浏览</span>
-          </NavLink>
-
-          {/* 聊天分析 */}
-          <NavLink
-            to="/analytics"
-            className={`nav-item ${isActive('/analytics') ? 'active' : ''}`}
-            title={collapsed ? '聊天分析' : undefined}
-          >
-            <span className="nav-icon"><BarChart3 size={20} /></span>
-            <span className="nav-label">聊天分析</span>
-          </NavLink>
-
-          {/* 年度报告 */}
-          <NavLink
-            to="/annual-report"
-            className={`nav-item ${isActive('/annual-report') ? 'active' : ''}`}
-            title={collapsed ? '年度报告' : undefined}
-          >
-            <span className="nav-icon"><FileText size={20} /></span>
-            <span className="nav-label">年度报告</span>
-          </NavLink>
-
-          {/* 我的足迹 */}
-          <NavLink
-            to="/footprint"
-            className={`nav-item ${isActive('/footprint') ? 'active' : ''}`}
-            title={collapsed ? '我的足迹' : undefined}
-          >
-            <span className="nav-icon"><Footprints size={20} /></span>
-            <span className="nav-label">我的足迹</span>
-          </NavLink>
-
-          {/* 导出 */}
-          <NavLink
-            to="/export"
-            className={`nav-item ${isActive('/export') ? 'active' : ''}`}
-            title={collapsed ? '导出' : undefined}
-          >
-            <span className="nav-icon nav-icon-with-badge">
-              <Download size={20} />
-              {collapsed && activeExportTaskCount > 0 && (
-                <span className="nav-badge icon-badge">{exportTaskBadge}</span>
-              )}
+            <span className="sidebar-database-icon" aria-hidden="true">
+              <Database size={14} />
+              <span className="sidebar-database-compact-dot" />
             </span>
-            <span className="nav-label">导出</span>
-            {!collapsed && activeExportTaskCount > 0 && (
-              <span className="nav-badge">{exportTaskBadge}</span>
+            {!collapsed && (
+              <span className="sidebar-database-copy">
+                <span className="sidebar-database-state">
+                  <span className="sidebar-database-dot" aria-hidden="true" />
+                  <span>{isDbConnected ? '微信已绑定' : '微信未绑定'}</span>
+                </span>
+                <span className="sidebar-database-detail">
+                  {isDbConnected ? databaseBasename : '点击配置'}
+                </span>
+              </span>
             )}
-          </NavLink>
+            {!collapsed && <ChevronRight className="sidebar-database-chevron" size={14} aria-hidden="true" />}
+          </button>
 
+          <div className="sidebar-user-card-wrap" ref={accountCardWrapRef}>
+            <div
+              id="sidebar-account-menu"
+              className={`sidebar-user-menu ${isAccountMenuOpen ? 'open' : ''}`}
+              role="menu"
+              aria-label="账号菜单"
+              aria-hidden={!isAccountMenuOpen}
+            >
+              <button
+                ref={firstAccountMenuItemRef}
+                className="sidebar-user-menu-item"
+                onClick={openAccountManagement}
+                type="button"
+                role="menuitem"
+                tabIndex={isAccountMenuOpen ? 0 : -1}
+              >
+                <Users size={14} />
+                <span>账号管理</span>
+              </button>
+              <button
+                className="sidebar-user-menu-item"
+                onClick={openSettingsFromAccountMenu}
+                type="button"
+                role="menuitem"
+                tabIndex={isAccountMenuOpen ? 0 : -1}
+              >
+                <Settings size={14} />
+                <span>设置</span>
+              </button>
+            </div>
+            <div
+              ref={accountTriggerRef}
+              className={`sidebar-user-card ${isAccountMenuOpen ? 'menu-open' : ''}`}
+              title={collapsed ? `${userProfile.displayName}${(userProfile.alias) ? `\n${userProfile.alias}` : ''}` : undefined}
+              onClick={() => setIsAccountMenuOpen(prev => !prev)}
+              role="button"
+              tabIndex={0}
+              aria-haspopup="menu"
+              aria-expanded={isAccountMenuOpen}
+              aria-controls="sidebar-account-menu"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setIsAccountMenuOpen(prev => !prev)
+                }
+              }}
+            >
+              <div className="user-avatar">
+                {userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <span>{getAvatarLetter(userProfile.displayName)}</span>}
+              </div>
+              <div className="user-meta">
+                <div className="user-name">{userProfile.displayName || DEFAULT_DISPLAY_NAME}</div>
+                <div className="user-wxid">{userProfile.alias ? `${userProfile.alias} · 微信账号` : 'Apple 账户'}</div>
+              </div>
+              {!collapsed && (
+                <span className={`user-menu-caret ${isAccountMenuOpen ? 'open' : ''}`}>
+                  <ChevronUp size={14} />
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
 
+        <nav className="nav-menu">
+          {/* Core Section */}
+          <div className="nav-section">
+            {!collapsed && <div className="nav-section-title">Core</div>}
+            <NavLink
+              to="/home"
+              className={`nav-item ${isActive('/home') ? 'active' : ''}`}
+              title={collapsed ? '首页' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-home"><Home size={14} /></span>
+              <span className="nav-label">首页</span>
+            </NavLink>
 
-          <NavLink
-            to="/backup"
-            className={`nav-item ${isActive('/backup') ? 'active' : ''}`}
-            title={collapsed ? '数据库备份' : undefined}
-          >
-            <span className="nav-icon"><ArchiveRestore size={20} /></span>
-            <span className="nav-label">数据库备份</span>
-          </NavLink>
+            <NavLink
+              to="/chat"
+              className={`nav-item ${isActive('/chat') ? 'active' : ''}`}
+              title={collapsed ? '聊天' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-chat"><MessageSquare size={14} /></span>
+              <span className="nav-label">聊天</span>
+            </NavLink>
 
+            <NavLink
+              to="/sns"
+              className={`nav-item ${isActive('/sns') ? 'active' : ''}`}
+              title={collapsed ? '朋友圈' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-moments"><Aperture size={14} /></span>
+              <span className="nav-label">朋友圈</span>
+            </NavLink>
 
+            <NavLink
+              to="/insight-inbox"
+              className={`nav-item ${isActive('/insight-inbox') ? 'active' : ''}`}
+              title={collapsed ? '灵感信箱' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-insight"><Sparkles size={14} /></span>
+              <span className="nav-label">灵感信箱</span>
+            </NavLink>
+
+            <NavLink
+              to="/contacts"
+              className={`nav-item ${isActive('/contacts') ? 'active' : ''}`}
+              title={collapsed ? '通讯录' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-contacts"><UserCircle size={14} /></span>
+              <span className="nav-label">通讯录</span>
+            </NavLink>
+          </div>
+
+          {/* Explore Section */}
+          <div className="nav-section">
+            {!collapsed && <div className="nav-section-title">Explore</div>}
+            <NavLink
+              to="/resources"
+              className={`nav-item ${isActive('/resources') ? 'active' : ''}`}
+              title={collapsed ? '资源浏览' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-resources"><FolderClosed size={14} /></span>
+              <span className="nav-label">资源浏览</span>
+            </NavLink>
+
+            <NavLink
+              to="/analytics"
+              className={`nav-item ${isActive('/analytics') ? 'active' : ''}`}
+              title={collapsed ? '聊天分析' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-analytics"><BarChart3 size={14} /></span>
+              <span className="nav-label">聊天分析</span>
+            </NavLink>
+
+            <NavLink
+              to="/annual-report"
+              className={`nav-item ${isActive('/annual-report') ? 'active' : ''}`}
+              title={collapsed ? '年度报告' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-annual"><FileText size={14} /></span>
+              <span className="nav-label">年度报告</span>
+            </NavLink>
+
+            <NavLink
+              to="/footprint"
+              className={`nav-item ${isActive('/footprint') ? 'active' : ''}`}
+              title={collapsed ? '我的足迹' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-footprints"><Footprints size={14} /></span>
+              <span className="nav-label">我的足迹</span>
+            </NavLink>
+          </div>
+
+          {/* Data & Utilities Section */}
+          <div className="nav-section">
+            {!collapsed && <div className="nav-section-title">Data & Utilities</div>}
+            <NavLink
+              to="/export"
+              className={`nav-item ${isActive('/export') ? 'active' : ''}`}
+              title={collapsed ? '导出' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-export nav-icon-with-badge">
+                <Download size={14} />
+                {collapsed && activeExportTaskCount > 0 && (
+                  <span className="nav-badge icon-badge">{exportTaskBadge}</span>
+                )}
+              </span>
+              <span className="nav-label">导出</span>
+              {!collapsed && activeExportTaskCount > 0 && (
+                <span className="nav-badge">{exportTaskBadge}</span>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/backup"
+              className={`nav-item ${isActive('/backup') ? 'active' : ''}`}
+              title={collapsed ? '数据库备份' : undefined}
+            >
+              <span className="sidebar-icon-badge badge-backup"><ArchiveRestore size={14} /></span>
+              <span className="nav-label">数据库备份</span>
+            </NavLink>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
@@ -454,58 +581,11 @@ function Sidebar({ collapsed }: SidebarProps) {
             title={collapsed ? lockActionLabel : undefined}
             aria-label={lockActionLabel}
           >
-            <span className="nav-icon">{authEnabled ? <Lock size={20} /> : <LockOpen size={20} />}</span>
+            <span className="sidebar-icon-badge badge-lock">
+              {authEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
+            </span>
             <span className="nav-label">{lockActionLabel}</span>
           </button>
-
-          <div className="sidebar-user-card-wrap" ref={accountCardWrapRef}>
-            <div className={`sidebar-user-menu ${isAccountMenuOpen ? 'open' : ''}`} role="menu" aria-label="账号菜单">
-              <button
-                className="sidebar-user-menu-item"
-                onClick={openAccountManagement}
-                type="button"
-                role="menuitem"
-              >
-                <Users size={14} />
-                <span>账号管理</span>
-              </button>
-              <button
-                className="sidebar-user-menu-item"
-                onClick={openSettingsFromAccountMenu}
-                type="button"
-                role="menuitem"
-              >
-                <Settings size={14} />
-                <span>设置</span>
-              </button>
-            </div>
-            <div
-              className={`sidebar-user-card ${isAccountMenuOpen ? 'menu-open' : ''}`}
-              title={collapsed ? `${userProfile.displayName}${(userProfile.alias) ? `\n${userProfile.alias}` : ''}` : undefined}
-              onClick={() => setIsAccountMenuOpen(prev => !prev)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  setIsAccountMenuOpen(prev => !prev)
-                }
-              }}
-            >
-              <div className="user-avatar">
-                {userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <span>{getAvatarLetter(userProfile.displayName)}</span>}
-              </div>
-              <div className="user-meta">
-                <div className="user-name">{userProfile.displayName || DEFAULT_DISPLAY_NAME}</div>
-                <div className="user-wxid">{userProfile.alias || DEFAULT_SUBTITLE}</div>
-              </div>
-              {!collapsed && (
-                <span className={`user-menu-caret ${isAccountMenuOpen ? 'open' : ''}`}>
-                  <ChevronUp size={14} />
-                </span>
-              )}
-            </div>
-          </div>
         </div>
       </aside>
     </>

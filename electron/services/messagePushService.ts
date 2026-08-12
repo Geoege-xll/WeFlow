@@ -6,6 +6,8 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
 import { pathToFileURL } from 'url'
+import { normalizedMessageEventHub } from '../omnimind/normalized-message-event-hub'
+import { bootstrapWatermark, failedFetchResult, nextInspectedWatermark } from '../omnimind/message-ingress-policy'
 
 interface SessionBaseline {
   lastTimestamp: number
@@ -48,7 +50,7 @@ const PUSH_CONFIG_KEYS = new Set([
   'myWxid'
 ])
 
-class MessagePushService {
+export class MessagePushService {
   private readonly configService: ConfigService
   private readonly sessionBaseline = new Map<string, SessionBaseline>()
   private readonly recentMessageKeys = new Map<string, number>()
@@ -68,8 +70,11 @@ class MessagePushService {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private messageTableRescanTimer: ReturnType<typeof setTimeout> | null = null
   private processing = false
+  private processingGeneration: number | undefined
   private rerunRequested = false
   private started = false
+  private generation = 0
+  private omniMindSubscriberActive = false
   private baselineReady = false
   private messageTableScanRequested = false
   private readonly pendingMessageTableNames = new Set<string>()
@@ -82,11 +87,13 @@ class MessagePushService {
   start(): void {
     if (this.started) return
     this.started = true
-    void this.refreshConfiguration('startup')
+    const generation = ++this.generation
+    void this.refreshConfiguration('startup', generation, true)
   }
 
   stop(): void {
     this.started = false
+    this.generation += 1
     this.processing = false
     this.rerunRequested = false
     this.resetRuntimeState()
@@ -94,7 +101,7 @@ class MessagePushService {
 
   handleDbMonitorChange(type: string, json: string): void {
     if (!this.started) return
-    if (!this.isPushEnabled()) return
+    if (!this.hasActiveDestination()) return
 
     let payload: Record<string, unknown> | null = null
     try {
@@ -124,13 +131,37 @@ class MessagePushService {
     }
   }
 
-  async handleConfigChanged(key: string): Promise<void> {
-    if (!PUSH_CONFIG_KEYS.has(String(key || '').trim())) return
+  async handleConfigChanged(key: string): Promise<boolean> {
+    if (!PUSH_CONFIG_KEYS.has(String(key || '').trim())) return true
     if (key === 'dbPath' || key === 'decryptKey' || key === 'myWxid') {
       this.resetRuntimeState()
       chatService.close()
     }
-    await this.refreshConfiguration(`config:${key}`)
+    return this.refreshConfiguration(`config:${key}`, this.generation, false)
+  }
+
+  async rebaselineForAccountChange(): Promise<boolean> {
+    const generation = ++this.generation
+    this.resetRuntimeState()
+    const connectResult = await chatService.connect()
+    if (generation !== this.generation) return false
+    if (!connectResult.success) return false
+    await this.bootstrapBaseline(generation, false)
+    return this.baselineReady
+  }
+
+  async handleOmniMindSubscriberChanged(active = normalizedMessageEventHub.hasSubscribers): Promise<boolean> {
+    const hadDestination = this.hasActiveDestination()
+    this.omniMindSubscriberActive = active
+    const hasDestination = this.hasActiveDestination()
+    if (!this.started) return true
+    if (!hadDestination && hasDestination) {
+      this.resetRuntimeState()
+      return this.refreshConfiguration('omnimind-subscriber-bootstrap', this.generation, true)
+    } else if (hadDestination && !hasDestination) {
+      this.resetRuntimeState()
+    }
+    return true
   }
 
   handleConfigCleared(): void {
@@ -140,6 +171,10 @@ class MessagePushService {
 
   private isPushEnabled(): boolean {
     return this.configService.get('messagePushEnabled') === true
+  }
+
+  private hasActiveDestination(): boolean {
+    return this.isPushEnabled() || this.omniMindSubscriberActive
   }
 
   private resetRuntimeState(): void {
@@ -162,23 +197,27 @@ class MessagePushService {
     }
   }
 
-  private async refreshConfiguration(reason: string): Promise<void> {
-    if (!this.isPushEnabled()) {
+  private async refreshConfiguration(reason: string, generation = this.generation, requireStarted = false): Promise<boolean> {
+    if (!this.hasActiveDestination()) {
       this.resetRuntimeState()
-      return
+      return true
     }
 
     const connectResult = await chatService.connect()
+    if (generation !== this.generation || (requireStarted && !this.started)) return false
     if (!connectResult.success) {
       console.warn(`[MessagePushService] Bootstrap connect failed (${reason}):`, connectResult.error)
-      return
+      return false
     }
 
-    await this.bootstrapBaseline()
+    await this.bootstrapBaseline(generation, requireStarted)
+    return this.baselineReady
   }
 
-  private async bootstrapBaseline(): Promise<void> {
+  private async bootstrapBaseline(generation: number, requireStarted: boolean): Promise<void> {
+    if (generation !== this.generation || (requireStarted && !this.started)) return
     const sessionsResult = await chatService.getSessions()
+    if (generation !== this.generation || (requireStarted && !this.started)) return
     if (!sessionsResult.success || !sessionsResult.sessions) {
       return
     }
@@ -213,7 +252,7 @@ class MessagePushService {
     const tableNames = [...messageTableNames]
     this.messageTableRescanTimer = setTimeout(() => {
       this.messageTableRescanTimer = null
-      if (!this.started || !this.isPushEnabled()) return
+      if (!this.started || !this.hasActiveDestination()) return
       this.scheduleSync({
         scanMessageBackedSessions: true,
         messageTableNames: tableNames
@@ -222,26 +261,30 @@ class MessagePushService {
   }
 
   private async flushPendingChanges(): Promise<void> {
-    if (this.processing) {
+    const generation = this.generation
+    if (this.processing && this.processingGeneration === generation) {
       this.rerunRequested = true
       return
     }
 
     this.processing = true
+    this.processingGeneration = generation
     try {
-      if (!this.isPushEnabled()) return
+      if (!this.hasActiveDestination()) return
       const scanMessageBackedSessions = this.messageTableScanRequested
       this.messageTableScanRequested = false
       const pendingMessageTableNames = Array.from(this.pendingMessageTableNames)
       this.pendingMessageTableNames.clear()
 
       const connectResult = await chatService.connect()
+      if (!this.started || generation !== this.generation) return
       if (!connectResult.success) {
         console.warn('[MessagePushService] Sync connect failed:', connectResult.error)
         return
       }
 
       const sessionsResult = await chatService.getSessions()
+      if (!this.started || generation !== this.generation) return
       if (!sessionsResult.success || !sessionsResult.sessions) {
         return
       }
@@ -278,8 +321,10 @@ class MessagePushService {
         const result = await this.pushSessionMessages(
           session,
           previous,
-          { scanRecentRevokes }
+          { scanRecentRevokes },
+          generation
         )
+        if (!this.started || generation !== this.generation) return
         this.updateInspectedBaseline(session, previousBaseline.get(session.username), result)
         if (result.retry) {
           this.rerunRequested = true
@@ -292,8 +337,10 @@ class MessagePushService {
         this.updateObservedBaseline(session, previousBaseline.get(sessionId))
       }
     } finally {
+      if (this.processingGeneration !== generation) return
       this.processing = false
-      if (this.rerunRequested) {
+      this.processingGeneration = undefined
+      if (this.rerunRequested && this.started && generation === this.generation) {
         this.rerunRequested = false
         this.scheduleSync({ scanMessageBackedSessions: this.messageTableScanRequested })
       }
@@ -310,7 +357,7 @@ class MessagePushService {
       if (!username) continue
       const previous = previousBaseline.get(username)
       const sessionTimestamp = Number(session.lastTimestamp || 0)
-      const initialTimestamp = sessionTimestamp > 0 ? sessionTimestamp : nowSeconds
+      const initialTimestamp = bootstrapWatermark(sessionTimestamp, nowSeconds)
       nextBaseline.set(username, {
         lastTimestamp: Math.max(sessionTimestamp, Number(previous?.lastTimestamp || 0), previous ? 0 : initialTimestamp),
         unreadCount: Number(session.unreadCount || 0)
@@ -343,9 +390,7 @@ class MessagePushService {
 
     const previousTimestamp = Number(previous?.lastTimestamp || 0)
     const current = this.sessionBaseline.get(username) || previous || { lastTimestamp: 0, unreadCount: 0 }
-    const nextTimestamp = result.retry
-      ? previousTimestamp
-      : Math.max(previousTimestamp, current.lastTimestamp, result.maxFetchedTimestamp)
+    const nextTimestamp = nextInspectedWatermark(previousTimestamp, current.lastTimestamp, result.maxFetchedTimestamp, result.retry)
 
     this.sessionBaseline.set(username, {
       lastTimestamp: nextTimestamp,
@@ -402,7 +447,8 @@ class MessagePushService {
   private async pushSessionMessages(
     session: ChatSession,
     previous: SessionBaseline | undefined,
-    options: PushSessionOptions = {}
+    options: PushSessionOptions = {},
+    generation = this.generation
   ): Promise<PushSessionResult> {
     const previousTimestamp = Math.max(0, Number(previous?.lastTimestamp || 0))
     const previousUnreadCount = Math.max(0, Number(previous?.unreadCount || 0))
@@ -414,7 +460,11 @@ class MessagePushService {
       ? Math.max(0, previousTimestamp - this.lookbackSeconds)
       : 0
     const newMessagesResult = await chatService.getNewMessages(session.username, since, 1000)
-    const fetchedMessages = newMessagesResult.success && Array.isArray(newMessagesResult.messages)
+    if (!this.started || generation !== this.generation) return { ...failedFetchResult(previousTimestamp, expectedIncomingCount), retry: false }
+    if (!newMessagesResult.success || !Array.isArray(newMessagesResult.messages)) {
+      return failedFetchResult(previousTimestamp, expectedIncomingCount)
+    }
+    const fetchedMessages = newMessagesResult.messages
       ? newMessagesResult.messages
       : []
     if (fetchedMessages.length === 0 && !options.scanRecentRevokes) {
@@ -509,10 +559,9 @@ class MessagePushService {
       const payload = this.isRevokeSystemMessage(message)
         ? await this.buildRevokePayload(session, message, fetchedMessages)
         : await this.buildPayload(session, message)
+      if (!this.started || generation !== this.generation) return { ...failedFetchResult(previousTimestamp, expectedIncomingCount), retry: false }
       if (!payload) continue
-      if (!this.shouldPushPayload(payload)) continue
-
-      httpService.broadcastMessagePush(payload)
+      if (!this.emitPayload(payload, message)) continue
       this.rememberMessageKey(messageKey)
       this.bumpSessionBaseline(session.username, message)
     }
@@ -524,7 +573,7 @@ class MessagePushService {
     if (sessionId) this.seenPrimedSessions.add(sessionId)
 
     const recentRevokeResult = options.scanRecentRevokes
-      ? await this.pushRecentRevokeMessages(session, previous, fetchedMessages)
+      ? await this.pushRecentRevokeMessages(session, previous, fetchedMessages, generation)
       : { pushedCount: 0, maxPushedTimestamp: 0 }
 
     return {
@@ -540,13 +589,15 @@ class MessagePushService {
   private async pushRecentRevokeMessages(
     session: ChatSession,
     previous: SessionBaseline | undefined,
-    contextMessages: Message[]
+    contextMessages: Message[],
+    generation = this.generation
   ): Promise<{ pushedCount: number; maxPushedTimestamp: number }> {
     const sessionId = String(session.username || '').trim()
     if (!sessionId) return { pushedCount: 0, maxPushedTimestamp: 0 }
 
     const since = this.getRecentRevokeScanSince(session, previous)
     const revokeMessages = await this.getRecentRevokeMessagesFromTables(sessionId, since)
+    if (!this.started || generation !== this.generation) return { pushedCount: 0, maxPushedTimestamp: 0 }
     if (revokeMessages.length === 0) {
       return { pushedCount: 0, maxPushedTimestamp: 0 }
     }
@@ -561,10 +612,9 @@ class MessagePushService {
       if (this.isRecentMessage(messageKey)) continue
 
       const payload = await this.buildRevokePayload(session, message, mergedMessages)
+      if (!this.started || generation !== this.generation) return { pushedCount, maxPushedTimestamp }
       if (!payload) continue
-      if (!this.shouldPushPayload(payload)) continue
-
-      httpService.broadcastMessagePush(payload)
+      if (!this.emitPayload(payload, message)) continue
       this.rememberMessageKey(messageKey)
       this.rememberSeenMessageKey(messageKey)
       this.bumpSessionBaseline(sessionId, message)
@@ -1120,6 +1170,7 @@ class MessagePushService {
   }
 
   private async normalizePushAvatarUrl(avatarUrl?: string): Promise<string | undefined> {
+    const generation = this.generation
     const normalized = String(avatarUrl || '').trim()
     if (!normalized) return undefined
     if (!normalized.startsWith('data:image/')) {
@@ -1143,13 +1194,16 @@ class MessagePushService {
       const filePath = path.join(this.pushAvatarCacheDir, `avatar_${hash}.${ext}`)
 
       await fs.mkdir(this.pushAvatarCacheDir, { recursive: true })
+      if (!this.started || generation !== this.generation) return undefined
       try {
         await fs.access(filePath)
       } catch {
+        if (!this.started || generation !== this.generation) return undefined
         await fs.writeFile(filePath, imageBuffer)
       }
 
       const fileUrl = pathToFileURL(filePath).toString()
+      if (!this.started || generation !== this.generation) return undefined
       this.pushAvatarDataCache.set(normalized, fileUrl)
       return fileUrl
     } catch {
@@ -1376,6 +1430,7 @@ class MessagePushService {
   }
 
   private async getGroupNicknames(chatroomId: string): Promise<Record<string, string>> {
+    const generation = this.generation
     const cacheKey = String(chatroomId || '').trim()
     if (!cacheKey) return {}
 
@@ -1388,7 +1443,7 @@ class MessagePushService {
     const nicknames = result.success && result.nicknames
       ? this.sanitizeGroupNicknames(result.nicknames)
       : {}
-    this.groupNicknameCache.set(cacheKey, { nicknames, updatedAt: Date.now() })
+    if (this.started && generation === this.generation) this.groupNicknameCache.set(cacheKey, { nicknames, updatedAt: Date.now() })
     return nicknames
   }
 
@@ -1419,6 +1474,33 @@ class MessagePushService {
     this.pruneRecentMessageKeys()
     const timestamp = this.recentMessageKeys.get(messageKey)
     return typeof timestamp === 'number' && Date.now() - timestamp < this.recentMessageTtlMs
+  }
+
+  private emitPayload(payload: MessagePushPayload, message: Message): boolean {
+    let delivered = false
+    if (payload.event === 'message.new' && payload.content) {
+      const accountId = String(this.configService.get('myWxid') || '').trim()
+      const messageKey = String(message.messageKey || '').trim()
+      if (accountId && messageKey) {
+        delivered = normalizedMessageEventHub.publish({
+          accountId,
+          sessionId: payload.sessionId,
+          messageKey,
+          direction: message.isSend === 1 ? 'outbound' : 'inbound',
+          text: payload.content,
+          timestamp: payload.timestamp,
+          sessionType: payload.sessionType,
+          messageType: Number(message.localType || 0),
+          contentType: Number(message.localType || 0) === 1 ? 'text' : 'other',
+          sessionName: payload.groupName || payload.sourceName
+        })
+      }
+    }
+    if (this.isPushEnabled() && this.shouldPushPayload(payload)) {
+      httpService.broadcastMessagePush(payload)
+      delivered = true
+    }
+    return delivered
   }
 
   private rememberMessageKey(messageKey: string): void {

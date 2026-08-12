@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   Aperture,
   BarChart3,
@@ -8,6 +8,7 @@ import {
   Info,
   Loader2,
   Mic,
+  MoreHorizontal,
   Newspaper,
   RefreshCw,
   Search,
@@ -18,6 +19,7 @@ import { Avatar } from '../../components/Avatar'
 import type { ChatSession } from '../../types/models'
 import type { BatchVoiceTaskType } from '../../stores/batchTranscribeStore'
 import { displayNameOrFallback } from '../../utils/displayName'
+import { useDetailChromeRegistration } from '../../components/common/DetailChromeContext'
 
 export interface ChatHeaderProps {
   session: ChatSession
@@ -43,11 +45,12 @@ export interface ChatHeaderProps {
   isRefreshingMessages: boolean
   isLoadingMessages: boolean
   currentSessionId?: string | null
+  compactHeader: boolean
   jumpCalendarWrapRef: React.RefObject<HTMLDivElement | null>
   onTriggerSessionInsight: () => void
-  onToggleGroupSummaryPanel: () => void
+  onToggleGroupSummaryPanel: (trigger?: HTMLButtonElement) => void
   onGroupAnalytics: () => void
-  onToggleGroupMembersPanel: () => void
+  onToggleGroupMembersPanel: (trigger?: HTMLButtonElement) => void
   onExportCurrentSession: () => void
   onOpenSnsTimeline: () => void
   onBatchTranscribe: () => void
@@ -55,7 +58,7 @@ export interface ChatHeaderProps {
   onToggleJumpPopover: () => void
   onToggleInSessionSearch: () => void
   onRefreshMessages: () => void
-  onToggleDetailPanel: () => void
+  onToggleDetailPanel: (trigger?: HTMLButtonElement) => void
 }
 
 function ChatHeader({
@@ -82,6 +85,7 @@ function ChatHeader({
   isRefreshingMessages,
   isLoadingMessages,
   currentSessionId,
+  compactHeader,
   jumpCalendarWrapRef,
   onTriggerSessionInsight,
   onToggleGroupSummaryPanel,
@@ -114,6 +118,55 @@ function ChatHeader({
   const batchImageDecryptTitle = isBatchDecrypting
     ? `批量解密图片中${batchImageDecryptProgress?.total ? `：${batchImageDecryptProgress.current}/${batchImageDecryptProgress.total}（${batchImageDecryptProgressPercent}%）` : ''}，可在导出页任务中心查看进度`
     : '批量解密图片'
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  useDetailChromeRegistration({
+    headerActions: (
+      <>
+        <div className="jump-calendar-anchor" ref={jumpCalendarWrapRef}>
+          <button
+            className={`icon-btn jump-to-time-btn ${showJumpPopover ? 'active' : ''}`}
+            onClick={onToggleJumpPopover}
+            title="跳转到指定时间"
+            aria-label="跳转到指定时间"
+          >
+            <Calendar size={18} />
+          </button>
+        </div>
+        <button
+          className={`icon-btn in-session-search-btn ${showInSessionSearch ? 'active' : ''}`}
+          onClick={onToggleInSessionSearch}
+          disabled={!currentSessionId}
+          title="搜索会话消息"
+          aria-label="搜索会话消息"
+        >
+          <Search size={18} />
+        </button>
+      </>
+    )
+  })
+
+  const closeMore = (restoreFocus = true): void => {
+    setMoreOpen(false)
+    if (restoreFocus) moreButtonRef.current?.focus()
+  }
+  const runMoreAction = (action: () => void): void => {
+    action()
+    closeMore()
+  }
+  useEffect(() => {
+    if (!moreOpen) return
+    moreMenuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      closeMore()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [moreOpen])
 
   return (
     <div className="message-header">
@@ -128,130 +181,151 @@ function ChatHeader({
         {isGroupChat && <div className="header-subtitle">群聊</div>}
       </div>
       <div className="header-actions">
-        <button
-          className={`icon-btn session-insight-btn${isTriggeringSessionInsight ? ' triggering' : ''}`}
-          onClick={onTriggerSessionInsight}
-          disabled={!currentSessionId || isTriggeringSessionInsight}
-          title={isTriggeringSessionInsight ? '正在生成 AI 见解' : '立即触发当前聊天 AI 见解'}
-          aria-label="立即触发当前聊天 AI 见解"
-        >
-          {isTriggeringSessionInsight ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-        </button>
-        {isGroupChat && aiGroupSummaryEnabled && (
+        <div className="header-action-group ai-actions">
           <button
-            className={`icon-btn group-summary-btn ${showGroupSummaryPanel ? 'active' : ''}`}
-            onClick={onToggleGroupSummaryPanel}
-            disabled={!currentSessionId}
-            title="AI 群聊总结"
-            aria-label="AI 群聊总结"
+            className={`icon-btn session-insight-btn${isTriggeringSessionInsight ? ' triggering' : ''}`}
+            onClick={onTriggerSessionInsight}
+            disabled={!currentSessionId || isTriggeringSessionInsight}
+            title={isTriggeringSessionInsight ? '正在生成 AI 见解' : '立即触发当前聊天 AI 见解'}
+            aria-label="立即触发当前聊天 AI 见解"
           >
-            <Newspaper size={18} />
+            {isTriggeringSessionInsight ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
           </button>
-        )}
-        {!standaloneSessionWindow && isGroupChat && (
-          <button className="icon-btn group-analytics-btn" onClick={onGroupAnalytics} title="群聊分析">
-            <BarChart3 size={18} />
-          </button>
-        )}
-        {isGroupChat && (
-          <button
-            className={`icon-btn group-members-btn ${showGroupMembersPanel ? 'active' : ''}`}
-            onClick={onToggleGroupMembersPanel}
-            title="群成员"
-          >
-            <Users size={18} />
-          </button>
-        )}
-        {!standaloneSessionWindow && (
-          <button
-            className={`icon-btn export-session-btn${isExportActionBusy ? ' exporting' : ''}`}
-            onClick={onExportCurrentSession}
-            disabled={!currentSessionId || isExportActionBusy}
-            title={exportTitle}
-          >
-            {isExportActionBusy ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
-          </button>
-        )}
-        {!standaloneSessionWindow && isPrivateSnsSupported && (
-          <button
-            className="icon-btn chat-sns-timeline-btn"
-            onClick={onOpenSnsTimeline}
-            disabled={!currentSessionId}
-            title="查看朋友圈"
-          >
-            <Aperture size={18} />
-          </button>
-        )}
-        {!standaloneSessionWindow && (
-          <button
-            className={`icon-btn batch-transcribe-btn${isBatchTranscribing ? ' transcribing' : ''}`}
-            onClick={onBatchTranscribe}
-            disabled={!currentSessionId}
-            title={batchVoiceTitle}
-            aria-label={batchVoiceTitle}
-          >
-            {isBatchTranscribing ? (
-              <>
-                <Loader2 size={18} className="spin" />
-                {batchVoiceProgress?.total ? (
-                  <span className="batch-progress-badge">{batchVoiceProgressPercent}%</span>
-                ) : null}
-              </>
-            ) : <Mic size={18} />}
-          </button>
-        )}
-        {!standaloneSessionWindow && (
-          <button
-            className={`icon-btn batch-decrypt-btn${isBatchDecrypting ? ' transcribing' : ''}`}
-            onClick={onBatchDecrypt}
-            disabled={!currentSessionId}
-            title={batchImageDecryptTitle}
-            aria-label={batchImageDecryptTitle}
-          >
-            {isBatchDecrypting ? (
-              <>
-                <Loader2 size={18} className="spin" />
-                {batchImageDecryptProgress?.total ? (
-                  <span className="batch-progress-badge">{batchImageDecryptProgressPercent}%</span>
-                ) : null}
-              </>
-            ) : <ImageIcon size={18} />}
-          </button>
-        )}
-        <div className="jump-calendar-anchor" ref={jumpCalendarWrapRef}>
-          <button
-            className={`icon-btn jump-to-time-btn ${showJumpPopover ? 'active' : ''}`}
-            onClick={onToggleJumpPopover}
-            title="跳转到指定时间"
-          >
-            <Calendar size={18} />
-          </button>
+          {isGroupChat && aiGroupSummaryEnabled && (
+            <button
+              className={`icon-btn chat-header-secondary-action group-summary-btn ${showGroupSummaryPanel ? 'active' : ''}`}
+              onClick={(event) => onToggleGroupSummaryPanel(event.currentTarget)}
+              disabled={!currentSessionId}
+              title="AI 群聊总结"
+              aria-label="AI 群聊总结"
+            >
+              <Newspaper size={18} />
+            </button>
+          )}
+          {!standaloneSessionWindow && isGroupChat && (
+            <button className="icon-btn chat-header-secondary-action group-analytics-btn" onClick={onGroupAnalytics} title="群聊分析" aria-label="群聊分析">
+              <BarChart3 size={18} />
+            </button>
+          )}
+          {isGroupChat && (
+            <button
+              className={`icon-btn chat-header-secondary-action group-members-btn ${showGroupMembersPanel ? 'active' : ''}`}
+              onClick={(event) => onToggleGroupMembersPanel(event.currentTarget)}
+              title="群成员"
+              aria-label="群成员"
+            >
+              <Users size={18} />
+            </button>
+          )}
         </div>
-        <button
-          className={`icon-btn in-session-search-btn ${showInSessionSearch ? 'active' : ''}`}
-          onClick={onToggleInSessionSearch}
-          disabled={!currentSessionId}
-          title="搜索会话消息"
-        >
-          <Search size={18} />
-        </button>
-        <button
-          className="icon-btn refresh-messages-btn"
-          onClick={onRefreshMessages}
-          disabled={isRefreshingMessages || isLoadingMessages}
-          title="刷新消息"
-        >
-          <RefreshCw size={18} className={isRefreshingMessages ? 'spin' : ''} />
-        </button>
-        {!shouldHideStandaloneDetailButton && (
+        <div className="header-action-group tool-actions">
+          {!standaloneSessionWindow && (
+            <button
+              className={`icon-btn chat-header-secondary-action export-session-btn${isExportActionBusy ? ' exporting' : ''}`}
+              onClick={onExportCurrentSession}
+              disabled={!currentSessionId || isExportActionBusy}
+              title={exportTitle}
+              aria-label={exportTitle}
+            >
+              {isExportActionBusy ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
+            </button>
+          )}
+          {!standaloneSessionWindow && isPrivateSnsSupported && (
+            <button
+              className="icon-btn chat-header-secondary-action chat-sns-timeline-btn"
+              onClick={onOpenSnsTimeline}
+              disabled={!currentSessionId}
+              title="查看朋友圈"
+              aria-label="查看朋友圈"
+            >
+              <Aperture size={18} />
+            </button>
+          )}
+          {!standaloneSessionWindow && (
+            <button
+              className={`icon-btn chat-header-secondary-action batch-transcribe-btn${isBatchTranscribing ? ' transcribing' : ''}`}
+              onClick={onBatchTranscribe}
+              disabled={!currentSessionId}
+              title={batchVoiceTitle}
+              aria-label={batchVoiceTitle}
+            >
+              {isBatchTranscribing ? (
+                <>
+                  <Loader2 size={18} className="spin" />
+                  {batchVoiceProgress?.total ? (
+                    <span className="batch-progress-badge">{batchVoiceProgressPercent}%</span>
+                  ) : null}
+                </>
+              ) : <Mic size={18} />}
+            </button>
+          )}
+          {!standaloneSessionWindow && (
+            <button
+              className={`icon-btn chat-header-secondary-action batch-decrypt-btn${isBatchDecrypting ? ' transcribing' : ''}`}
+              onClick={onBatchDecrypt}
+              disabled={!currentSessionId}
+              title={batchImageDecryptTitle}
+              aria-label={batchImageDecryptTitle}
+            >
+              {isBatchDecrypting ? (
+                <>
+                  <Loader2 size={18} className="spin" />
+                  {batchImageDecryptProgress?.total ? (
+                    <span className="batch-progress-badge">{batchImageDecryptProgressPercent}%</span>
+                  ) : null}
+                </>
+              ) : <ImageIcon size={18} />}
+            </button>
+          )}
+        </div>
+        <div className="header-action-group view-actions">
           <button
-            className={`icon-btn detail-btn ${showDetailPanel ? 'active' : ''}`}
-            onClick={onToggleDetailPanel}
-            title="会话详情"
+            className="icon-btn chat-header-secondary-action refresh-messages-btn"
+            onClick={onRefreshMessages}
+            disabled={isRefreshingMessages || isLoadingMessages}
+            title="刷新消息"
+            aria-label="刷新消息"
           >
-            <Info size={18} />
+            <RefreshCw size={18} className={isRefreshingMessages ? 'spin' : ''} />
           </button>
-        )}
+          {!shouldHideStandaloneDetailButton && (
+            <button
+              className={`icon-btn detail-btn ${showDetailPanel ? 'active' : ''}`}
+              onClick={(event) => onToggleDetailPanel(event.currentTarget)}
+              title="会话详情"
+              aria-label="会话详情"
+            >
+              <Info size={18} />
+            </button>
+          )}
+          {compactHeader && (
+            <div className="chat-header-more-wrap">
+              <button
+                ref={moreButtonRef}
+                type="button"
+                className="icon-btn chat-header-more-btn"
+                aria-label="更多会话操作"
+                aria-expanded={moreOpen}
+                aria-controls="chat-header-more-menu"
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {moreOpen && (
+                <div ref={moreMenuRef} id="chat-header-more-menu" className="chat-header-more-menu" role="menu">
+                  {isGroupChat && aiGroupSummaryEnabled && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(() => onToggleGroupSummaryPanel(moreButtonRef.current ?? undefined))}><Newspaper size={16} />AI 群聊总结</button>}
+                  {!standaloneSessionWindow && isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(onGroupAnalytics)}><BarChart3 size={16} />群聊分析</button>}
+                  {isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(() => onToggleGroupMembersPanel(moreButtonRef.current ?? undefined))}><Users size={16} />群成员</button>}
+                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId || isExportActionBusy} onClick={() => runMoreAction(onExportCurrentSession)}><Download size={16} />{exportTitle}</button>}
+                  {!standaloneSessionWindow && isPrivateSnsSupported && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onOpenSnsTimeline)}><Aperture size={16} />查看朋友圈</button>}
+                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchTranscribe)}><Mic size={16} />{batchVoiceTitle}</button>}
+                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchDecrypt)}><ImageIcon size={16} />{batchImageDecryptTitle}</button>}
+                  <button type="button" role="menuitem" disabled={isRefreshingMessages || isLoadingMessages} onClick={() => runMoreAction(onRefreshMessages)}><RefreshCw size={16} />刷新消息</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -286,6 +360,7 @@ function areEqual(prev: ChatHeaderProps, next: ChatHeaderProps) {
     prev.isRefreshingMessages === next.isRefreshingMessages &&
     prev.isLoadingMessages === next.isLoadingMessages &&
     prev.currentSessionId === next.currentSessionId &&
+    prev.compactHeader === next.compactHeader &&
     prev.jumpCalendarWrapRef === next.jumpCalendarWrapRef &&
     prev.onTriggerSessionInsight === next.onTriggerSessionInsight &&
     prev.onToggleGroupSummaryPanel === next.onToggleGroupSummaryPanel &&

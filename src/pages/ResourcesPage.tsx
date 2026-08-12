@@ -35,10 +35,13 @@ import {
   type ContactOption,
   type DialogState,
   type ImagePreloadPayload,
-  type MediaStreamItem,
-  type MediaTab
+  type MediaStreamItem
 } from './ResourcesPage.utils'
+import { WeFlowCard, WeFlowDialog } from '../components/common'
+import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
 import './ResourcesPage.scss'
+
+export type MediaTab = 'all' | 'image' | 'video' | 'voice' | 'file'
 
 const waitForBatchDecryptYield = () => new Promise<void>((resolve) => window.setTimeout(resolve, BATCH_IMAGE_DECRYPT_YIELD_MS))
 
@@ -520,7 +523,7 @@ const MediaCard = memo(function MediaCard({
   const timeLabel = useMemo(() => formatTimeLabel(item.createTime), [item.createTime])
 
   return (
-    <article className={`media-card ${selected ? 'selected' : ''} ${isDecryptingVisual ? 'decrypting' : ''}`}>
+    <WeFlowCard className={`media-card ${selected ? 'selected' : ''} ${isDecryptingVisual ? 'decrypting' : ''}`}>
       <button type="button" className="floating-info" onClick={() => onShowInfo(item)} aria-label="查看资源信息">
         <Info size={14} />
       </button>
@@ -594,7 +597,7 @@ const MediaCard = memo(function MediaCard({
           {item.senderUsername && <span>{item.senderUsername}</span>}
         </div>
       </div>
-    </article>
+    </WeFlowCard>
   )
 }, areMediaCardPropsEqual)
 
@@ -623,11 +626,58 @@ const MediaCardContainer = memo(function MediaCardContainer({
 })
 
 function ResourcesPage() {
-  const [tab, setTab] = useState<MediaTab>('image')
+  const [tab, setTab] = useState<MediaTab>('all')
   const [contacts, setContacts] = useState<ContactOption[]>([{ id: 'all', name: '全部联系人' }])
   const [selectedContact, setSelectedContact] = useState('all')
   const [dateStart, setDateStart] = useState('')
   const [dateEnd, setDateEnd] = useState('')
+
+  const mediaTabFilters = useMemo(
+    () => (
+      <div className="media-tabs">
+        <button
+          type="button"
+          className={tab === 'all' ? 'active' : ''}
+          onClick={() => setTab('all')}
+        >
+          全部
+        </button>
+        <button
+          type="button"
+          className={tab === 'image' ? 'active' : ''}
+          onClick={() => setTab('image')}
+        >
+          图片
+        </button>
+        <button
+          type="button"
+          className={tab === 'video' ? 'active' : ''}
+          onClick={() => setTab('video')}
+        >
+          视频
+        </button>
+        <button
+          type="button"
+          className={tab === 'voice' ? 'active' : ''}
+          onClick={() => setTab('voice')}
+        >
+          语音
+        </button>
+        <button
+          type="button"
+          className={tab === 'file' ? 'active' : ''}
+          onClick={() => setTab('file')}
+        >
+          文件
+        </button>
+      </div>
+    ),
+    [tab]
+  )
+
+  useDetailChromeRegistration({
+    headerFilters: mediaTabFilters
+  })
 
   const [items, setItems] = useState<MediaStreamItem[]>([])
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -1358,7 +1408,7 @@ function ResourcesPage() {
       const streamLoadStartedAt = performance.now()
       const streamResult = await window.electronAPI.chat.getMediaStream({
         sessionId: selectedContact === 'all' ? undefined : selectedContact,
-        mediaType: tab,
+        mediaType: (tab === 'image' || tab === 'video' || tab === 'all') ? tab : 'all',
         beginTimestamp: getRangeTimestampStart(dateStart),
         endTimestamp: getRangeTimestampEnd(dateEnd),
         offset: requestOffset,
@@ -2140,13 +2190,14 @@ function ResourcesPage() {
     }
     pendingRangeRef.current = null
     bumpRuntimeCounter('rangeFlushes')
-    if (tab === 'image') {
+    if (tab === 'image' || tab === 'all') {
       preloadImageCacheRange(pending.start - 4, pending.end + 20)
       resolveImageCacheRange(pending.start - 1, pending.end + 6)
       schedulePredecryptRange(pending.start - 1, pending.end + IMAGE_PREDECRYPT_LOOKAHEAD)
-      return
     }
-    resolvePosterRange(pending.start, pending.end)
+    if (tab === 'video' || tab === 'all') {
+      resolvePosterRange(pending.start, pending.end)
+    }
   }, [bumpRuntimeCounter, preloadImageCacheRange, resolveImageCacheRange, resolvePosterRange, schedulePredecryptRange, tab])
 
   const scheduleRangeResolve = useCallback((start: number, end: number) => {
@@ -2198,13 +2249,14 @@ function ResourcesPage() {
     const scheduleKey = `${preloadScopeRef.current}|${tab}`
     if (initialRangeScheduleKeyRef.current === scheduleKey) return
     initialRangeScheduleKeyRef.current = scheduleKey
-    if (tab === 'image') {
+    if (tab === 'image' || tab === 'all') {
       preloadImageCacheRange(0, Math.min(items.length - 1, INITIAL_IMAGE_PRELOAD_END))
       resolveImageCacheRange(0, Math.min(items.length - 1, INITIAL_IMAGE_RESOLVE_END))
       schedulePredecryptRange(0, Math.min(items.length - 1, INITIAL_IMAGE_PREDECRYPT_END))
-      return
     }
-    resolvePosterRange(0, Math.min(items.length - 1, 12))
+    if (tab === 'video' || tab === 'all') {
+      resolvePosterRange(0, Math.min(items.length - 1, 12))
+    }
   }, [bumpRuntimeCounter, items, preloadImageCacheRange, resolveImageCacheRange, resolvePosterRange, schedulePredecryptRange, tab])
 
   const selectedItems = useMemo(() => {
@@ -2694,10 +2746,6 @@ function ResourcesPage() {
     <div className="resources-page stream-rebuild">
       <header className="stream-toolbar">
         <div className="toolbar-left">
-          <div className="media-tabs">
-            <button type="button" className={tab === 'image' ? 'active' : ''} onClick={() => setTab('image')}>图片</button>
-            <button type="button" className={tab === 'video' ? 'active' : ''} onClick={() => setTab('video')}>视频</button>
-          </div>
           <div className="filters">
             <label className="filter-field filter-select">
               <UserRound size={14} />
@@ -2752,7 +2800,32 @@ function ResourcesPage() {
       <div className="stream-summary">
         <span>已加载 {items.length} 条</span>
         <span>已选 {selectedKeys.size} 条</span>
-        <span>{tab === 'image' ? '图片按时间倒序流式展示' : '视频按时间倒序流式展示'}</span>
+        <span>
+          {tab === 'all'
+            ? '资源按时间倒序流式展示'
+            : tab === 'image'
+            ? '图片按时间倒序流式展示'
+            : tab === 'video'
+            ? '视频按时间倒序流式展示'
+            : tab === 'voice'
+            ? '语音按时间倒序流式展示'
+            : '文件按时间倒序流式展示'}
+        </span>
+        {items.length > 0 && (
+          <button
+            type="button"
+            className="summary-select-btn"
+            onClick={() => {
+              if (selectedKeys.size === items.length) {
+                setSelectedKeys(new Set())
+              } else {
+                setSelectedKeys(new Set(items.map(getItemKey)))
+              }
+            }}
+          >
+            {selectedKeys.size === items.length ? '取消全选' : '全选本页'}
+          </button>
+        )}
         {actionMessage && <span className="action-message">{actionMessage}</span>}
       </div>
 
@@ -2786,25 +2859,13 @@ function ResourcesPage() {
         </div>
       )}
 
-      {dialog && (
-        <div className="resource-dialog-mask">
-          <div className="resource-dialog" role="dialog" aria-modal="true" aria-label={dialog.title}>
-            <header className="dialog-header">{dialog.title}</header>
-            <div className="dialog-body">
-              {dialog.mode === 'info' ? (
-                <div className="dialog-info-list">
-                  {(dialog.infoRows || []).map((row, idx) => (
-                    <div className="dialog-info-row" key={`${row.label}-${idx}`}>
-                      <span className="info-label">{row.label}</span>
-                      <span className="info-value" title={row.value}>{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                dialog.message
-              )}
-            </div>
-            <footer className="dialog-actions">
+      <WeFlowDialog
+        open={Boolean(dialog)}
+        onClose={closeDialog}
+        title={dialog?.title}
+        footer={
+          dialog && (
+            <div className="dialog-actions">
               {dialog.mode === 'confirm' && (
                 <button type="button" className="dialog-btn ghost" onClick={closeDialog}>
                   {dialog.cancelText || '取消'}
@@ -2821,10 +2882,25 @@ function ResourcesPage() {
               >
                 {dialog.confirmText || '确定'}
               </button>
-            </footer>
-          </div>
-        </div>
-      )}
+            </div>
+          )
+        }
+      >
+        {dialog && (
+          dialog.mode === 'info' ? (
+            <div className="dialog-info-list">
+              {(dialog.infoRows || []).map((row, idx) => (
+                <div className="dialog-info-row" key={`${row.label}-${idx}`}>
+                  <span className="info-label">{row.label}</span>
+                  <span className="info-value" title={row.value}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            dialog.message
+          )
+        )}
+      </WeFlowDialog>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import Store from 'electron-store'
 import { expandHomePath } from '../utils/pathUtils'
 import { CacheMapStore } from './cacheMapStore'
+import type { AccountConfigBundle } from '../../shared/omnimind/account-bundle'
 
 // 条件导入 electron（Worker 环境中不可用）
 let app: any = null
@@ -1131,5 +1132,36 @@ export class ConfigService {
     this.unlockedKeys.clear()
     this.unlockPassword = null
   }
-}
 
+  setAccountBundle(bundle: AccountConfigBundle): void {
+    const inLockMode = this.isLockMode() && this.unlockPassword
+    const storedBundle: Record<keyof AccountConfigBundle, string | number> = {
+      ...bundle,
+      dbPath: expandHomePath(bundle.dbPath),
+      decryptKey: inLockMode
+        ? this.lockEncrypt(bundle.decryptKey, this.unlockPassword!)
+        : this.safeEncrypt(bundle.decryptKey),
+      imageXorKey: inLockMode
+        ? this.lockEncrypt(String(bundle.imageXorKey), this.unlockPassword!)
+        : this.safeEncrypt(String(bundle.imageXorKey)),
+      imageAesKey: inLockMode
+        ? this.lockEncrypt(bundle.imageAesKey, this.unlockPassword!)
+        : this.safeEncrypt(bundle.imageAesKey)
+    }
+    this.store.set(storedBundle as Partial<ConfigSchema>)
+    if (inLockMode) {
+      this.unlockedKeys.set('decryptKey', bundle.decryptKey)
+      this.unlockedKeys.set('imageXorKey', bundle.imageXorKey)
+      this.unlockedKeys.set('imageAesKey', bundle.imageAesKey)
+    }
+  }
+
+  getAccountBundle(): AccountConfigBundle {
+    return {
+      myWxid: String(this.get('myWxid') || ''), dbPath: String(this.get('dbPath') || ''),
+      decryptKey: String(this.get('decryptKey') || ''), imageXorKey: Number(this.get('imageXorKey') || 0),
+      imageAesKey: String(this.get('imageAesKey') || ''), cachePath: String(this.get('cachePath') || ''),
+      lastOpenedDb: String(this.get('lastOpenedDb') || '')
+    }
+  }
+}

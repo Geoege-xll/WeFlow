@@ -2,48 +2,74 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-primary);
-  border-radius: 10px;
-  padding: 8px 16px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--shadow-color) 40%, transparent);
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 10px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   border: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  gap: 16px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    pointer-events: none;
+  }
 
   .top-bar-left {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
 
     .label {
       font-size: 13px;
       font-weight: 600;
-      color: var(--text-tertiary);
-      margin-right: 10px;
+      color: var(--text-secondary);
+      margin-right: 6px;
       white-space: nowrap;
+      letter-spacing: -0.01em;
     }
 
     .path-selector {
       display: flex;
       align-items: center;
+      flex: 1 1 200px;
+      min-width: 140px;
 
       .path-display-group {
         display: flex;
         align-items: center;
         gap: 6px;
+        flex: 1;
+        min-width: 0;
       }
 
       .path-btn {
         display: flex;
         align-items: center;
         gap: 6px;
-        background: var(--bg-tertiary);
+        background: var(--bg-primary);
         border: 1px solid var(--border-color);
         padding: 5px 12px;
-        border-radius: 6px;
+        border-radius: 16px;
         color: var(--text-primary);
         font-size: 13px;
+        font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s ease;
-        max-width: 240px;
+        transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        flex: 1;
+        min-width: 0;
+        max-width: 280px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 
         .path-text {
           white-space: nowrap;
@@ -52,9 +78,13 @@
         }
 
         &:hover {
-          border-color: var(--primary);
-          background: color-mix(in srgb, var(--primary) 4%, transparent);
-          color: var(--primary);
+          border-color: var(--text-secondary);
+          background: var(--bg-hover, var(--bg-primary));
+          transform: translateY(-0.5px);
+        }
+
+        &:active {
+          transform: translateY(0);
         }
       }
 
@@ -64,17 +94,22 @@
         justify-content: center;
         width: 30px;
         height: 30px;
-        background: transparent;
+        background: var(--bg-primary);
         border: 1px solid var(--border-color);
-        border-radius: 6px;
-        color: var(--text-tertiary);
+        border-radius: 15px;
+        color: var(--text-secondary);
         cursor: pointer;
-        transition: all 0.2s ease;
+        flex-shrink: 0;
+        transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 
         &:hover {
-          border-color: var(--primary);
-          background: color-mix(in srgb, var(--primary) 4%, transparent);
+          border-color: var(--text-secondary);
           color: var(--primary);
+          transform: translateY(-0.5px);
+        }
+
+        &:active {
+          transform: translateY(0);
         }
       }
     }
@@ -82,35 +117,37 @@
     .layout-selector {
       display: flex;
       align-items: center;
+      flex-shrink: 0;
 
       .layout-pills {
         display: flex;
-        background: var(--bg-tertiary);
-        border-radius: 6px;
+        background: var(--bg-primary);
+        border-radius: 18px;
         padding: 3px;
         border: 1px solid var(--border-color);
+        gap: 2px;
 
         .pill-btn {
           background: transparent;
           border: none;
-          padding: 5px 12px;
-          border-radius: 4px;
+          padding: 4px 12px;
+          border-radius: 14px;
           font-size: 12px;
           font-weight: 500;
           color: var(--text-secondary);
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: all 0.15s ease;
           white-space: nowrap;
 
           &:hover {
             color: var(--text-primary);
-            background: color-mix(in srgb, var(--text-tertiary) 15%, transparent);
           }
 
           &.active {
             background: var(--primary);
-            color: white;
-            box-shadow: 0 2px 4px color-mix(in srgb, var(--primary) 40%, transparent);
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
           }
         }
       }
@@ -120,26 +157,61 @@
   .top-bar-right {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
 
     .global-settings-btn {
       display: flex;
       align-items: center;
       gap: 6px;
-      background: transparent;
-      border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border-color));
-      padding: 6px 14px;
-      border-radius: 6px;
-      color: var(--primary);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 5px 14px;
+      border-radius: 16px;
+      color: var(--text-primary);
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
       white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 
       &:hover {
-        background: color-mix(in srgb, var(--primary) 8%, transparent);
-        border-color: var(--primary);
+        border-color: var(--text-secondary);
+        color: var(--primary);
+        transform: translateY(-0.5px);
       }
+
+      &:active {
+        transform: translateY(0);
+      }
+    }
+  }
+
+  @media (max-width: 880px) {
+    padding: 10px 14px;
+    gap: 12px;
+
+    .top-bar-left {
+      gap: 12px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+
+    .top-bar-left {
+      width: 100%;
+      flex: 1 1 100%;
+      justify-content: space-between;
+
+      .path-selector {
+        flex: 1 1 auto;
+      }
+    }
+
+    .top-bar-right {
+      margin-left: auto;
     }
   }
 }

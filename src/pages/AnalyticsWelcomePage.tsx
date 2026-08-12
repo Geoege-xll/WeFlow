@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { BarChart2, History, RefreshCcw } from 'lucide-react'
 import { useAnalyticsStore } from '../stores/analyticsStore'
-import ChatAnalysisHeader from '../components/ChatAnalysisHeader'
 import './AnalyticsWelcomePage.scss'
 
 function AnalyticsWelcomePage() {
@@ -23,8 +22,6 @@ function AnalyticsWelcomePage() {
 
     return (
         <div className="analytics-welcome-shell">
-            <ChatAnalysisHeader currentMode="private" />
-
             <div className="analytics-welcome-body">
                 <div className="analytics-welcome-content">
                     <div className="analytics-welcome-icon">

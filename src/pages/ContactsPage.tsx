@@ -8,6 +8,8 @@ import type { ContactInfo } from '../types/models'
 import { ContactSnsTimelineDialog } from '../components/Sns/ContactSnsTimelineDialog'
 import { type ContactSnsTimelineTarget, isSingleContactSession } from '../components/Sns/contactSnsTimeline'
 import { displayNameOrFallback } from '../utils/displayName'
+import { WeFlowCard, WeFlowSearch } from '../components/common'
+import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
 import './ContactsPage.scss'
 
 interface ContactEnrichInfo {
@@ -899,197 +901,205 @@ function ContactsPage() {
         return exportFormatOptions.find(opt => opt.value === value)?.label || value
     }
 
+    const contactsHeaderActions = useMemo(() => (
+        <>
+            <button
+                type="button"
+                className={`btn-secondary ${exportMode ? 'active' : ''}`}
+                onClick={() => { setExportMode(!exportMode); setSelectedContact(null) }}
+                title={exportMode ? '退出导出模式' : '进入导出模式'}
+            >
+                <Download size={14} />
+                <span>{exportMode ? '退出导出' : '批量导出'}</span>
+            </button>
+            <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void loadContacts()}
+                disabled={isLoading}
+                title="刷新通讯录"
+            >
+                <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
+                <span>刷新</span>
+            </button>
+        </>
+    ), [exportMode, isLoading])
+
+    useDetailChromeRegistration({
+        headerActions: contactsHeaderActions
+    })
+
     return (
         <div className="contacts-page">
             {/* 左侧：联系人列表 */}
             <div className="contacts-panel">
-                <div className="panel-header">
-                    <h2>通讯录</h2>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button
-                            className={`icon-btn export-mode-btn ${exportMode ? 'active' : ''}`}
-                            onClick={() => { setExportMode(!exportMode); setSelectedContact(null) }}
-                            title={exportMode ? '退出导出模式' : '进入导出模式'}
-                        >
-                            <Download size={18} />
-                        </button>
-                        <button className="icon-btn" onClick={() => void loadContacts()} disabled={isLoading}>
-                            <RefreshCw size={18} className={isLoading ? 'spin' : ''} />
-                        </button>
+                <div className="contacts-filter-card">
+                    <div className="search-bar-wrap">
+                        <WeFlowSearch
+                            value={searchKeyword}
+                            onChange={setSearchKeyword}
+                            placeholder="搜索联系人..."
+                        />
                     </div>
-                </div>
 
-                <div className="search-bar">
-                    <Search size={16} />
-                    <input
-                        type="text"
-                        placeholder="搜索联系人..."
-                        value={searchKeyword}
-                        onChange={e => setSearchKeyword(e.target.value)}
-                    />
-                    {searchKeyword && (
-                        <button className="clear-btn" onClick={() => setSearchKeyword('')}>
-                            <X size={14} />
-                        </button>
-                    )}
-                </div>
-
-                <div className="type-filters">
-                    <label className={`filter-chip ${contactTypes.friends ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.friends} onChange={e => setContactTypes({ ...contactTypes, friends: e.target.checked })} />
-                        <User size={16} />
-                        <span className="chip-label">好友</span>
-                        <span className="chip-count">{contactTypeCounts.friends}</span>
-                    </label>
-                    <label className={`filter-chip ${contactTypes.groups ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.groups} onChange={e => setContactTypes({ ...contactTypes, groups: e.target.checked })} />
-                        <Users size={16} />
-                        <span className="chip-label">群聊</span>
-                        <span className="chip-count">{contactTypeCounts.groups}</span>
-                    </label>
-                    <label className={`filter-chip ${contactTypes.officialSubscriptions ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.officialSubscriptions} onChange={e => setContactTypes({ ...contactTypes, officialSubscriptions: e.target.checked })} />
-                        <MessageSquare size={16} />
-                        <span className="chip-label">公众号</span>
-                        <span className="chip-count">{contactTypeCounts.officialSubscriptions}</span>
-                    </label>
-                    <label className={`filter-chip ${contactTypes.officialServices ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.officialServices} onChange={e => setContactTypes({ ...contactTypes, officialServices: e.target.checked })} />
-                        <MessageSquare size={16} />
-                        <span className="chip-label">服务号</span>
-                        <span className="chip-count">{contactTypeCounts.officialServices}</span>
-                    </label>
-                    <label className={`filter-chip ${contactTypes.deletedFriends ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.deletedFriends} onChange={e => setContactTypes({ ...contactTypes, deletedFriends: e.target.checked })} />
-                        <UserX size={16} />
-                        <span className="chip-label">曾经的好友</span>
-                        <span className="chip-count">{contactTypeCounts.deletedFriends}</span>
-                    </label>
-                    <label className={`filter-chip ${contactTypes.blocked ? 'active' : ''}`}>
-                        <input type="checkbox" checked={contactTypes.blocked} onChange={e => setContactTypes({ ...contactTypes, blocked: e.target.checked })} />
-                        <UserX size={16} />
-                        <span className="chip-label">黑名单</span>
-                        <span className="chip-count">{contactTypeCounts.blocked}</span>
-                    </label>
-                </div>
-
-
-                {exportMode && (
-                    <div className="selection-toolbar">
-                        <label className="checkbox-item">
-                            <input
-                                type="checkbox"
-                                checked={allFilteredSelected}
-                                onChange={e => toggleAllFilteredSelected(e.target.checked)}
-                                disabled={filteredContacts.length === 0}
-                            />
-                            <span>全选当前筛选结果</span>
+                    <div className="type-filters">
+                        <label className={`filter-chip ${contactTypes.friends ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.friends} onChange={e => setContactTypes({ ...contactTypes, friends: e.target.checked })} />
+                            <User size={16} />
+                            <span className="chip-label">好友</span>
+                            <span className="chip-count">{contactTypeCounts.friends}</span>
                         </label>
-                        <span className="selection-count">已选 {selectedUsernames.size}（当前筛选 {selectedInFilteredCount} / {filteredContacts.length}）</span>
+                        <label className={`filter-chip ${contactTypes.groups ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.groups} onChange={e => setContactTypes({ ...contactTypes, groups: e.target.checked })} />
+                            <Users size={16} />
+                            <span className="chip-label">群聊</span>
+                            <span className="chip-count">{contactTypeCounts.groups}</span>
+                        </label>
+                        <label className={`filter-chip ${contactTypes.officialSubscriptions ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.officialSubscriptions} onChange={e => setContactTypes({ ...contactTypes, officialSubscriptions: e.target.checked })} />
+                            <MessageSquare size={16} />
+                            <span className="chip-label">公众号</span>
+                            <span className="chip-count">{contactTypeCounts.officialSubscriptions}</span>
+                        </label>
+                        <label className={`filter-chip ${contactTypes.officialServices ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.officialServices} onChange={e => setContactTypes({ ...contactTypes, officialServices: e.target.checked })} />
+                            <MessageSquare size={16} />
+                            <span className="chip-label">服务号</span>
+                            <span className="chip-count">{contactTypeCounts.officialServices}</span>
+                        </label>
+                        <label className={`filter-chip ${contactTypes.deletedFriends ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.deletedFriends} onChange={e => setContactTypes({ ...contactTypes, deletedFriends: e.target.checked })} />
+                            <UserX size={16} />
+                            <span className="chip-label">曾经的好友</span>
+                            <span className="chip-count">{contactTypeCounts.deletedFriends}</span>
+                        </label>
+                        <label className={`filter-chip ${contactTypes.blocked ? 'active' : ''}`}>
+                            <input type="checkbox" checked={contactTypes.blocked} onChange={e => setContactTypes({ ...contactTypes, blocked: e.target.checked })} />
+                            <UserX size={16} />
+                            <span className="chip-label">黑名单</span>
+                            <span className="chip-count">{contactTypeCounts.blocked}</span>
+                        </label>
                     </div>
-                )}
+                </div>
 
-                {contacts.length === 0 && loadIssue ? (
-                    <div className="load-issue-state">
-                        <div className="issue-card">
-                            <div className="issue-title">
-                                <AlertTriangle size={18} />
-                                <span>{loadIssue.title}</span>
-                            </div>
-                            <p className="issue-message">{loadIssue.message}</p>
-                            <p className="issue-reason">{loadIssue.reason}</p>
-                            <ul className="issue-hints">
-                                <li>可能原因1：数据库当前仍在执行高开销查询（例如导出页后台统计）。</li>
-                                <li>可能原因2：contact.db 数据量较大，首次查询时间过长。</li>
-                                <li>可能原因3：数据库连接状态异常或 IPC 调用卡住。</li>
-                            </ul>
-                            <div className="issue-actions">
-                                <button className="issue-btn primary" onClick={() => void loadContacts()}>
-                                    <RefreshCw size={14} />
-                                    <span>重试加载</span>
-                                </button>
-                                <button className="issue-btn" onClick={() => setShowDiagnostics(prev => !prev)}>
-                                    <ClipboardList size={14} />
-                                    <span>{showDiagnostics ? '收起诊断详情' : '查看诊断详情'}</span>
-                                </button>
-                                <button className="issue-btn" onClick={copyDiagnostics}>
-                                    <span>复制诊断信息</span>
-                                </button>
-                            </div>
-                            {showDiagnostics && (
-                                <pre className="issue-diagnostics">{diagnosticsText}</pre>
-                            )}
+                <div className="contacts-list-card">
+                    {exportMode && (
+                        <div className="selection-toolbar">
+                            <label className="checkbox-item">
+                                <input
+                                    type="checkbox"
+                                    checked={allFilteredSelected}
+                                    onChange={e => toggleAllFilteredSelected(e.target.checked)}
+                                    disabled={filteredContacts.length === 0}
+                                />
+                                <span>全选当前筛选结果</span>
+                            </label>
+                            <span className="selection-count">已选 {selectedUsernames.size}（当前筛选 {selectedInFilteredCount} / {filteredContacts.length}）</span>
                         </div>
-                    </div>
-                ) : isLoading && contacts.length === 0 ? (
-                    <div className="loading-state">
-                        <Loader2 size={32} className="spin" />
-                        <span>联系人加载中...</span>
-                    </div>
-                ) : filteredContacts.length === 0 ? (
-                    <div className="empty-state">
-                        <span>暂无联系人</span>
-                    </div>
-                ) : (
-                    <div className="contacts-list" ref={listRef} onScroll={onContactsListScroll}>
-                        <div
-                            className="contacts-list-virtual"
-                            style={{ height: filteredContacts.length * VIRTUAL_ROW_HEIGHT }}
-                        >
-                            {visibleContacts.map((contact, idx) => {
-                            const absoluteIndex = startIndex + idx
-                            const top = absoluteIndex * VIRTUAL_ROW_HEIGHT
-                            const isChecked = selectedUsernames.has(contact.username)
-                            const isActive = !exportMode && selectedContact?.username === contact.username
-                            return (
-                                <div
-                                    key={contact.username}
-                                    className="contact-row"
-                                    style={{ transform: `translateY(${top}px)` }}
-                                >
+                    )}
+
+                    {contacts.length === 0 && loadIssue ? (
+                        <div className="load-issue-state">
+                            <WeFlowCard className="issue-card">
+                                <div className="issue-title">
+                                    <AlertTriangle size={18} />
+                                    <span>{loadIssue.title}</span>
+                                </div>
+                                <p className="issue-message">{loadIssue.message}</p>
+                                <p className="issue-reason">{loadIssue.reason}</p>
+                                <ul className="issue-hints">
+                                    <li>可能原因1：数据库当前仍在执行高开销查询（例如导出页后台统计）。</li>
+                                    <li>可能原因2：contact.db 数据量较大，首次查询时间过长。</li>
+                                    <li>可能原因3：数据库连接状态异常或 IPC 调用卡住。</li>
+                                </ul>
+                                <div className="issue-actions">
+                                    <button className="issue-btn primary" onClick={() => void loadContacts()}>
+                                        <RefreshCw size={14} />
+                                        <span>重试加载</span>
+                                    </button>
+                                    <button className="issue-btn" onClick={() => setShowDiagnostics(prev => !prev)}>
+                                        <ClipboardList size={14} />
+                                        <span>{showDiagnostics ? '收起诊断详情' : '查看诊断详情'}</span>
+                                    </button>
+                                    <button className="issue-btn" onClick={copyDiagnostics}>
+                                        <span>复制诊断信息</span>
+                                    </button>
+                                </div>
+                                {showDiagnostics && (
+                                    <pre className="issue-diagnostics">{diagnosticsText}</pre>
+                                )}
+                            </WeFlowCard>
+                        </div>
+                    ) : isLoading && contacts.length === 0 ? (
+                        <div className="loading-state">
+                            <Loader2 size={32} className="spin" />
+                            <span>联系人加载中...</span>
+                        </div>
+                    ) : filteredContacts.length === 0 ? (
+                        <div className="empty-state">
+                            <span>暂无联系人</span>
+                        </div>
+                    ) : (
+                        <div className="contacts-list" ref={listRef} onScroll={onContactsListScroll}>
+                            <div
+                                className="contacts-list-virtual"
+                                style={{ height: filteredContacts.length * VIRTUAL_ROW_HEIGHT }}
+                            >
+                                {visibleContacts.map((contact, idx) => {
+                                const absoluteIndex = startIndex + idx
+                                const top = absoluteIndex * VIRTUAL_ROW_HEIGHT
+                                const isChecked = selectedUsernames.has(contact.username)
+                                const isActive = !exportMode && selectedContact?.username === contact.username
+                                return (
                                     <div
-                                        className={`contact-item ${exportMode && isChecked ? 'selected' : ''} ${isActive ? 'active' : ''}`}
-                                        onClick={() => {
-                                            if (exportMode) {
-                                                toggleContactSelected(contact.username, !isChecked)
-                                            } else {
-                                                setSelectedContact(isActive ? null : contact)
-                                            }
-                                        }}
+                                        key={contact.username}
+                                        className="contact-row"
+                                        style={{ transform: `translateY(${top}px)` }}
                                     >
-                                        {exportMode && (
-                                            <label className="contact-select" onClick={e => e.stopPropagation()}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={e => toggleContactSelected(contact.username, e.target.checked)}
-                                                />
-                                            </label>
-                                        )}
-                                        <div className="contact-avatar">
-                                            {contact.avatarUrl ? (
-                                                <img src={contact.avatarUrl} alt="" loading="lazy" />
-                                            ) : (
-                                                <span>{getAvatarLetter(contact.displayName)}</span>
+                                        <div
+                                            className={`contact-item ${exportMode && isChecked ? 'selected' : ''} ${isActive ? 'active' : ''}`}
+                                            onClick={() => {
+                                                if (exportMode) {
+                                                    toggleContactSelected(contact.username, !isChecked)
+                                                } else {
+                                                    setSelectedContact(isActive ? null : contact)
+                                                }
+                                            }}
+                                        >
+                                            {exportMode && (
+                                                <label className="contact-select" onClick={e => e.stopPropagation()}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={e => toggleContactSelected(contact.username, e.target.checked)}
+                                                    />
+                                                </label>
                                             )}
-                                        </div>
-                                        <div className="contact-info">
-                                            <div className="contact-name">{contact.displayName}</div>
-                                            {contact.remark && contact.remark !== contact.displayName && (
-                                                <div className="contact-remark">备注: {contact.remark}</div>
-                                            )}
-                                        </div>
-                                        <div className={`contact-type ${contact.type} ${contact.officialAccountKind || ''}`}>
-                                            {getContactTypeIcon(contact.type)}
-                                            <span>{getContactTypeName(contact)}</span>
+                                            <div className="contact-avatar">
+                                                {contact.avatarUrl ? (
+                                                    <img src={contact.avatarUrl} alt="" loading="lazy" />
+                                                ) : (
+                                                    <span>{getAvatarLetter(contact.displayName)}</span>
+                                                )}
+                                            </div>
+                                            <div className="contact-info">
+                                                <div className="contact-name">{contact.displayName}</div>
+                                                {contact.remark && contact.remark !== contact.displayName && (
+                                                    <div className="contact-remark">备注: {contact.remark}</div>
+                                                )}
+                                            </div>
+                                            <div className={`contact-type ${contact.type} ${contact.officialAccountKind || ''}`}>
+                                                {getContactTypeIcon(contact.type)}
+                                                <span>{getContactTypeName(contact)}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            )
-                            })}
+                                )
+                                })}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* 右侧面板 */}

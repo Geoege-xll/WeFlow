@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Users, Clock, MessageSquare, Send, Inbox, Calendar, Loader2, RefreshCw, Medal, UserMinus, Search, X } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
@@ -12,7 +12,8 @@ import {
 } from '../services/backgroundTaskMonitor'
 import './AnalyticsPage.scss'
 import { Avatar } from '../components/Avatar'
-import ChatAnalysisHeader from '../components/ChatAnalysisHeader'
+import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
+import { WeFlowCard, WeFlowDialog, WeFlowSearch } from '../components/common'
 
 interface ExcludeCandidate {
   username: string
@@ -470,10 +471,20 @@ function AnalyticsPage() {
     const hours = Array.from({ length: 24 }, (_, i) => i)
     const data = hours.map(h => timeDistribution.hourlyDistribution[h] || 0)
     return {
+      grid: { left: 10, right: 10, top: 20, bottom: 5, containLabel: true },
       tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: hours.map(h => `${h}时`) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data, itemStyle: { color: '#07c160', borderRadius: [4, 4, 0, 0] } }]
+      xAxis: {
+        type: 'category',
+        data: hours.map(h => `${h}时`),
+        axisLabel: { color: chartTheme.secondaryText, fontSize: 11 },
+        axisLine: { lineStyle: { color: chartTheme.border } }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { color: chartTheme.secondaryText, fontSize: 11 },
+        splitLine: { lineStyle: { color: chartTheme.border, type: 'dashed' } }
+      },
+      series: [{ type: 'bar', data, itemStyle: { color: chartTheme.primary, borderRadius: [4, 4, 0, 0] } }]
     }
   }
 
@@ -631,24 +642,30 @@ function AnalyticsPage() {
 
   const selfSentDailyRatioData = getSelfSentDailyRatioData()
 
-  const renderPageShell = (content: ReactNode) => (
-    <div className="analytics-page-shell">
-      <ChatAnalysisHeader currentMode="private" />
-      {content}
-    </div>
+  const analyticsHeaderActions = useMemo(
+    () => (
+      <>
+        <button className="btn btn-secondary" onClick={handleRefresh} disabled={isLoading}>
+          <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
+          {isLoading ? '刷新中...' : '刷新'}
+        </button>
+        <button className="btn btn-secondary" onClick={openExcludeDialog}>
+          <UserMinus size={16} />
+          排除好友{excludedUsernames.size > 0 ? ` (${excludedUsernames.size})` : ''}
+        </button>
+      </>
+    ),
+    [handleRefresh, isLoading, openExcludeDialog, excludedUsernames.size]
   )
 
-  const analyticsHeaderActions = (
-    <>
-      <button className="btn btn-secondary" onClick={handleRefresh} disabled={isLoading}>
-        <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
-        {isLoading ? '刷新中...' : '刷新'}
-      </button>
-      <button className="btn btn-secondary" onClick={openExcludeDialog}>
-        <UserMinus size={16} />
-        排除好友{excludedUsernames.size > 0 ? ` (${excludedUsernames.size})` : ''}
-      </button>
-    </>
+  useDetailChromeRegistration({
+    headerActions: analyticsHeaderActions
+  })
+
+  const renderPageShell = (content: ReactNode) => (
+    <div className="analytics-page-shell">
+      {content}
+    </div>
   )
 
   if (isLoading && !isLoaded) {
@@ -692,38 +709,37 @@ function AnalyticsPage() {
 
   return (
     <div className="analytics-page-shell">
-      <ChatAnalysisHeader currentMode="private" actions={analyticsHeaderActions} />
       <div className="page-scroll">
         <section className="page-section">
           <div className="stats-overview">
-            <div className="stat-card">
-              <div className="stat-icon"><MessageSquare size={24} /></div>
+            <WeFlowCard hoverElastic className="stat-card">
+              <div className="stat-icon"><MessageSquare size={16} /></div>
               <div className="stat-info">
-                <span className="stat-value">{formatNumber(statistics?.totalMessages || 0)}</span>
                 <span className="stat-label">总消息数</span>
+                <span className="stat-value">{formatNumber(statistics?.totalMessages || 0)}</span>
               </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Send size={24} /></div>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="stat-card">
+              <div className="stat-icon"><Send size={16} /></div>
               <div className="stat-info">
-                <span className="stat-value">{formatNumber(statistics?.sentMessages || 0)}</span>
                 <span className="stat-label">发送消息</span>
+                <span className="stat-value">{formatNumber(statistics?.sentMessages || 0)}</span>
               </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Inbox size={24} /></div>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="stat-card">
+              <div className="stat-icon"><Inbox size={16} /></div>
               <div className="stat-info">
-                <span className="stat-value">{formatNumber(statistics?.receivedMessages || 0)}</span>
                 <span className="stat-label">接收消息</span>
+                <span className="stat-value">{formatNumber(statistics?.receivedMessages || 0)}</span>
               </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Calendar size={24} /></div>
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="stat-card">
+              <div className="stat-icon"><Calendar size={16} /></div>
               <div className="stat-info">
-                <span className="stat-value">{statistics?.activeDays || 0}</span>
                 <span className="stat-label">活跃天数</span>
+                <span className="stat-value">{statistics?.activeDays || 0}</span>
               </div>
-            </div>
+            </WeFlowCard>
           </div>
           {statistics && (
             <div className="time-range">
@@ -732,10 +748,19 @@ function AnalyticsPage() {
             </div>
           )}
           <div className="charts-grid">
-            <div className="chart-card"><h3>消息类型分布</h3><ReactECharts option={getTypeChartOption()} style={{ height: 300 }} /></div>
-            <div className="chart-card"><h3>发送/接收比例</h3><ReactECharts option={getSendReceiveOption()} style={{ height: 300 }} /></div>
-            <div className="chart-card wide"><h3>每小时消息分布</h3><ReactECharts option={getHourlyOption()} style={{ height: 250 }} /></div>
-            <div className="chart-card wide self-sent-ratio-card">
+            <WeFlowCard hoverElastic className="chart-card">
+              <h3>消息类型分布</h3>
+              <ReactECharts option={getTypeChartOption()} style={{ height: 230 }} />
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="chart-card">
+              <h3>发送/接收比例</h3>
+              <ReactECharts option={getSendReceiveOption()} style={{ height: 230 }} />
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="chart-card wide">
+              <h3>每小时消息分布</h3>
+              <ReactECharts option={getHourlyOption()} style={{ height: 210 }} />
+            </WeFlowCard>
+            <WeFlowCard hoverElastic className="chart-card wide self-sent-ratio-card">
               <div className="chart-title-row">
                 <h3>每日自身发送强度比例</h3>
                 <span>范围：全部 · 基线：{selfSentDailyRatioData.baseline.toFixed(1)} 条/天 · 共 {formatNumber(selfSentDailyDistribution?.totalMessages || 0)} 条</span>
@@ -743,113 +768,111 @@ function AnalyticsPage() {
               <div className="chart-note">
                 比例 = 当日自身发送量 ÷ 全期每日平均自身发送量。超过 100% 表示高于本人基线
               </div>
-              <ReactECharts key={chartThemeSignature} option={getSelfSentDailyRatioOption()} style={{ height: 320 }} />
-            </div>
+              <ReactECharts key={chartThemeSignature} option={getSelfSentDailyRatioOption()} style={{ height: 260 }} />
+            </WeFlowCard>
           </div>
         </section>
         <section className="page-section">
           <div className="section-header"><div><h2><Users size={20} /> 聊天排名 Top 20</h2></div></div>
           <div className="rankings-list">
-            {rankings.map((contact, index) => (
-              <div key={contact.username} className="ranking-item">
-                <span className={`rank ${index < 3 ? 'top' : ''}`}>{index + 1}</span>
-                <div className="contact-avatar">
-                  <Avatar src={contact.avatarUrl} name={contact.displayName} size={36} />
-                  {index < 3 && <div className={`medal medal-${index + 1}`}><Medal size={10} /></div>}
-                </div>
-                <div className="contact-info">
-                  <span className="contact-name">{contact.displayName}</span>
-                  <span className="contact-stats">发送 {contact.sentCount} / 接收 {contact.receivedCount}</span>
-                </div>
-                <span className="message-count">{formatNumber(contact.messageCount)} 条</span>
-              </div>
-            ))}
+            {(() => {
+              const maxCount = rankings[0]?.messageCount || 1
+              return rankings.map((contact, index) => {
+                const ratioPercent = Math.min(100, Math.max(4, Math.round((contact.messageCount / maxCount) * 100)))
+                return (
+                  <WeFlowCard key={contact.username} hoverElastic className="ranking-item">
+                    <div className="ranking-progress-bar" style={{ width: `${ratioPercent}%` }} />
+                    <span className={`rank ${index < 3 ? 'top' : ''}`}>{index + 1}</span>
+                    <div className="contact-avatar">
+                      <Avatar src={contact.avatarUrl} name={contact.displayName} size={36} />
+                      {index < 3 && <div className={`medal medal-${index + 1}`}><Medal size={10} /></div>}
+                    </div>
+                    <div className="contact-info">
+                      <span className="contact-name">{contact.displayName}</span>
+                      <span className="contact-stats">发送 {formatNumber(contact.sentCount)} / 接收 {formatNumber(contact.receivedCount)}</span>
+                    </div>
+                    <span className="message-count">{formatNumber(contact.messageCount)} 条</span>
+                  </WeFlowCard>
+                )
+              })
+            })()}
           </div>
         </section>
       </div>
-      {isExcludeDialogOpen && (
-        <div className="exclude-modal-overlay" onClick={() => setIsExcludeDialogOpen(false)}>
-          <div className="exclude-modal" onClick={e => e.stopPropagation()}>
-            <div className="exclude-modal-header">
-              <h3>选择不统计的好友</h3>
-              <button className="modal-close" onClick={() => setIsExcludeDialogOpen(false)}>
-                <X size={18} />
+
+      <WeFlowDialog
+        open={isExcludeDialogOpen}
+        onClose={() => setIsExcludeDialogOpen(false)}
+        title="选择不统计的好友"
+        size="md"
+        filters={
+          <WeFlowSearch
+            value={excludeQuery}
+            onChange={setExcludeQuery}
+            placeholder="搜索好友..."
+            disabled={excludeLoading}
+          />
+        }
+        footer={
+          <>
+            <div className="exclude-footer-left" style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="exclude-count">已排除 {draftExcluded.size} 人</span>
+              <button className="btn btn-text" onClick={toggleInvertSelection} disabled={excludeLoading}>
+                反选
               </button>
             </div>
-            <div className="exclude-modal-search">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="搜索好友"
-                value={excludeQuery}
-                onChange={e => setExcludeQuery(e.target.value)}
-                disabled={excludeLoading}
-              />
-              {excludeQuery && (
-                <button className="clear-search" onClick={() => setExcludeQuery('')}>
-                  <X size={14} />
-                </button>
-              )}
+            <div className="exclude-actions" style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-secondary" onClick={() => setIsExcludeDialogOpen(false)}>
+                取消
+              </button>
+              <button className="btn btn-primary" onClick={handleApplyExcluded} disabled={excludeLoading}>
+                应用
+              </button>
             </div>
-            <div className="exclude-modal-body">
-              {excludeLoading && (
-                <div className="exclude-loading">
-                  <Loader2 size={20} className="spin" />
-                  <span>正在加载好友列表...</span>
-                </div>
-              )}
-              {!excludeLoading && excludeError && (
-                <div className="exclude-error">{excludeError}</div>
-              )}
-              {!excludeLoading && !excludeError && (
-                <div className="exclude-list">
-                  {visibleExcludeCandidates.map((candidate) => {
-                    const isChecked = draftExcluded.has(normalizeUsername(candidate.username))
-                    const wechatId = candidate.wechatId?.trim() || candidate.username
-                    return (
-                      <label key={candidate.username} className={`exclude-item ${isChecked ? 'active' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleExcluded(candidate.username)}
-                        />
-                        <div className="exclude-avatar">
-                          <Avatar src={candidate.avatarUrl} name={candidate.displayName} size={32} />
-                        </div>
-                        <div className="exclude-info">
-                          <span className="exclude-name">{candidate.displayName}</span>
-                          <span className="exclude-username">{wechatId}</span>
-                        </div>
-                      </label>
-                    )
-                  })}
-                  {visibleExcludeCandidates.length === 0 && (
-                    <div className="exclude-empty">
-                      {excludeQuery.trim() ? '未找到匹配好友' : '暂无可选好友'}
+          </>
+        }
+      >
+        <div className="exclude-modal-body" style={{ padding: 0 }}>
+          {excludeLoading && (
+            <div className="exclude-loading">
+              <Loader2 size={20} className="spin" />
+              <span>正在加载好友列表...</span>
+            </div>
+          )}
+          {!excludeLoading && excludeError && (
+            <div className="exclude-error">{excludeError}</div>
+          )}
+          {!excludeLoading && !excludeError && (
+            <div className="exclude-list">
+              {visibleExcludeCandidates.map((candidate) => {
+                const isChecked = draftExcluded.has(normalizeUsername(candidate.username))
+                const wechatId = candidate.wechatId?.trim() || candidate.username
+                return (
+                  <label key={candidate.username} className={`exclude-item ${isChecked ? 'active' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleExcluded(candidate.username)}
+                    />
+                    <div className="exclude-avatar">
+                      <Avatar src={candidate.avatarUrl} name={candidate.displayName} size={32} />
                     </div>
-                  )}
+                    <div className="exclude-info">
+                      <span className="exclude-name">{candidate.displayName}</span>
+                      <span className="exclude-username">{wechatId}</span>
+                    </div>
+                  </label>
+                )
+              })}
+              {visibleExcludeCandidates.length === 0 && (
+                <div className="exclude-empty">
+                  {excludeQuery.trim() ? '未找到匹配好友' : '暂无可选好友'}
                 </div>
               )}
             </div>
-            <div className="exclude-modal-footer">
-              <div className="exclude-footer-left">
-                <span className="exclude-count">已排除 {draftExcluded.size} 人</span>
-                <button className="btn btn-text" onClick={toggleInvertSelection} disabled={excludeLoading}>
-                  反选
-                </button>
-              </div>
-              <div className="exclude-actions">
-                <button className="btn btn-secondary" onClick={() => setIsExcludeDialogOpen(false)}>
-                  取消
-                </button>
-                <button className="btn btn-primary" onClick={handleApplyExcluded} disabled={excludeLoading}>
-                  应用
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </WeFlowDialog>
     </div>
   )
 }

@@ -289,10 +289,7 @@ function AccountManagementPage() {
   }, [clearAnalyticsStoreCache, isDbConnected, resetChatStore])
 
   const applyWxidConfig = useCallback(async (wxid: string, wxidConfig: configService.WxidConfig | null) => {
-    await configService.setMyWxid(wxid)
-    await configService.setDecryptKey(wxidConfig?.decryptKey || '')
-    await configService.setImageXorKey(typeof wxidConfig?.imageXorKey === 'number' ? wxidConfig.imageXorKey : 0)
-    await configService.setImageAesKey(wxidConfig?.imageAesKey || '')
+    await configService.setAccountBundle({ myWxid: wxid, dbPath, decryptKey: wxidConfig?.decryptKey || '', imageXorKey: typeof wxidConfig?.imageXorKey === 'number' ? wxidConfig.imageXorKey : 0, imageAesKey: wxidConfig?.imageAesKey || '', cachePath: String(await configService.getCachePath() || ''), lastOpenedDb: dbPath })
   }, [])
 
   const handleSwitchAccount = useCallback(async (wxid: string) => {
@@ -361,6 +358,13 @@ function AccountManagementPage() {
         return
       }
 
+      const currentNormalized = normalizeAccountId(currentWxid) || currentWxid
+      const isDeletingCurrent = Boolean(currentNormalized && currentNormalized === normalizedTarget)
+      if (isDeletingCurrent) {
+        const cleanup = await window.electronAPI.chat.clearCurrentAccountData({ clearCache: true })
+        if (!cleanup.success) throw new Error(cleanup.error || '当前账号安全停机清理失败')
+      }
+
       const deletedConfigEntries: Array<[string, configService.WxidConfig]> = matchedKeys.map((key) => [key, nextConfigs[key] || {}])
       for (const key of matchedKeys) {
         delete nextConfigs[key]
@@ -378,8 +382,6 @@ function AccountManagementPage() {
       }
       window.localStorage.setItem(ACCOUNT_PROFILES_CACHE_KEY, JSON.stringify(accountProfileCache))
 
-      const currentNormalized = normalizeAccountId(currentWxid) || currentWxid
-      const isDeletingCurrent = Boolean(currentNormalized && currentNormalized === normalizedTarget)
       const undoPayload: DeleteUndoState = {
         targetWxid,
         deletedConfigEntries,
@@ -390,8 +392,6 @@ function AccountManagementPage() {
       }
 
       if (isDeletingCurrent) {
-        await clearRuntimeCacheState()
-
         const remainingEntries = Object.entries(nextConfigs)
           .filter(([wxid]) => Boolean(String(wxid || '').trim()))
           .sort((a, b) => Number(b[1]?.updatedAt || 0) - Number(a[1]?.updatedAt || 0))
@@ -407,10 +407,7 @@ function AccountManagementPage() {
           return
         }
 
-        await configService.setMyWxid('')
-        await configService.setDecryptKey('')
-        await configService.setImageXorKey(0)
-        await configService.setImageAesKey('')
+        await configService.setAccountBundle({ myWxid: '', dbPath: '', decryptKey: '', imageXorKey: 0, imageAesKey: '', lastOpenedDb: '' })
         setDbConnected(false)
         window.dispatchEvent(new CustomEvent('wxid-changed', { detail: { wxid: '' } }))
         addHiddenDeletedAccountNormId(normalizedTarget)

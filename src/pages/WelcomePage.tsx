@@ -752,13 +752,9 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
         return
       }
 
-      await configService.setDbPath(dbPath)
-      await configService.setDecryptKey(decryptKey)
-      await configService.setMyWxid(wxid)
       await configService.setCachePath(cachePath)
       const parsedXorKey = imageXorKey ? parseInt(imageXorKey.replace(/^0x/i, ''), 16) : null
-      await configService.setImageXorKey(typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0)
-      await configService.setImageAesKey(imageAesKey || '')
+      await configService.setAccountBundle({ myWxid: wxid, dbPath, decryptKey, cachePath, lastOpenedDb: dbPath, imageXorKey: typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0, imageAesKey: imageAesKey || '' })
       await configService.setWxidConfig(wxid, {
         decryptKey,
         imageXorKey: typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0,

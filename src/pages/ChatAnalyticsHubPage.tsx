@@ -9,7 +9,6 @@ function ChatAnalyticsHubPage() {
     <div className="analytics-hub">
       <div className="analytics-hub-inner">
         <div className="analytics-hub-hero">
-          <h1 className="analytics-hub-title">聊天分析</h1>
           <p className="analytics-hub-desc">
             选择你要进入的分析视角，深入了解关系网络、活跃时段与消息趋势。
           </p>

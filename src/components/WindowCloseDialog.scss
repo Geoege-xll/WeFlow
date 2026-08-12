@@ -9,7 +9,7 @@
     radial-gradient(circle at top, rgba(36, 42, 54, 0.18), transparent 48%),
     rgba(7, 10, 18, 0.56);
   backdrop-filter: blur(10px);
-  z-index: 3000;
+  z-index: var(--layer-critical);
   animation: windowCloseDialogFadeIn 0.2s ease-out;
 }
 

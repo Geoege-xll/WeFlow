@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './ChatAnalysisHeader.scss'
@@ -63,7 +63,6 @@ function ChatAnalysisHeader({ currentMode, actions }: ChatAnalysisHeaderProps) {
           className="chat-analysis-back"
           onClick={() => navigate('/analytics')}
         >
-          <ChevronLeft size={16} />
           <span>聊天分析</span>
         </button>
         <span className="chat-analysis-breadcrumb-separator">/</span>

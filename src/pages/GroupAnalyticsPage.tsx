@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Users, BarChart3, Clock, Image, Loader2, RefreshCw, Medal, Search, X, ChevronLeft, Copy, Check, Download, ChevronDown, MessageSquare, Calendar, PieChart, Hash, Smile } from 'lucide-react'
 import { Avatar } from '../components/Avatar'
+import { WeFlowCard } from '../components/common/WeFlowCard'
 import ReactECharts from 'echarts-for-react'
 import DateRangePicker from '../components/DateRangePicker'
-import ChatAnalysisHeader from '../components/ChatAnalysisHeader'
 import * as configService from '../services/config'
 import type { Message } from '../types/models'
 import {
@@ -1202,8 +1202,9 @@ function GroupAnalyticsPage() {
     return (
       <div className="function-content">
         <div className="content-header">
-          <button className="back-btn" onClick={() => setSelectedFunction(null)}>
-            <ChevronLeft size={20} />
+          <button className="back-btn" onClick={() => setSelectedFunction(null)} title="返回功能列表">
+            <ChevronLeft size={16} />
+            <span>返回列表</span>
           </button>
           <div className="header-info">
             <h3>{getFunctionTitle()}</h3>
@@ -1443,29 +1444,29 @@ function GroupAnalyticsPage() {
                       ) : memberAnalyticsData ? (
                         <div className="analytics-content-scrollable" style={{ padding: '0', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                           <div className="stats-overview">
-                            <div className="stat-card">
-                              <div className="stat-icon"><MessageSquare size={24} /></div>
+                            <WeFlowCard hoverElastic className="stat-card">
+                              <div className="stat-icon"><MessageSquare size={16} /></div>
                               <div className="stat-info">
-                                <span className="stat-value">{formatNumber(memberAnalyticsData.statistics.sentMessages)}</span>
                                 <span className="stat-label">发信数量</span>
+                                <span className="stat-value">{formatNumber(memberAnalyticsData.statistics.sentMessages)}</span>
                               </div>
-                            </div>
-                            <div className="stat-card">
-                              <div className="stat-icon"><Clock size={24} /></div>
+                            </WeFlowCard>
+                            <WeFlowCard hoverElastic className="stat-card">
+                              <div className="stat-icon"><Clock size={16} /></div>
                               <div className="stat-info">
-                                <span className="stat-value">{memberAnalyticsData.statistics.activeDays}</span>
                                 <span className="stat-label">活跃天数</span>
+                                <span className="stat-value">{memberAnalyticsData.statistics.activeDays}</span>
                               </div>
-                            </div>
-                            <div className="stat-card" style={{ gridColumn: 'span 2' }}>
-                              <div className="stat-icon"><Calendar size={24} /></div>
+                            </WeFlowCard>
+                            <WeFlowCard hoverElastic className="stat-card" style={{ gridColumn: 'span 2' }}>
+                              <div className="stat-icon"><Calendar size={16} /></div>
                               <div className="stat-info">
+                                <span className="stat-label">活跃周期</span>
                                 <span className="stat-value">
                                   {formatDate(memberAnalyticsData.statistics.firstMessageTime)} - {formatDate(memberAnalyticsData.statistics.lastMessageTime)}
                                 </span>
-                                <span className="stat-label">活跃周期</span>
                               </div>
-                            </div>
+                            </WeFlowCard>
                           </div>
                           
                           <div className="charts-grid">
@@ -1834,7 +1835,6 @@ function GroupAnalyticsPage() {
 
   return (
     <div className="group-analytics-shell">
-      <ChatAnalysisHeader currentMode="group" />
       <div className={`group-analytics-page ${isResizing ? 'resizing' : ''}`} ref={containerRef}>
         {renderGroupList()}
         <div className="resize-handle" onMouseDown={() => setIsResizing(true)} />

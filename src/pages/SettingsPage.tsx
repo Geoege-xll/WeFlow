@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useAppStore } from '../stores/appStore'
@@ -53,6 +54,60 @@ const tabs: { id: Exclude<SettingsTab, 'insight' | 'aiFootprint' | 'aiMessageIns
   { id: 'security', label: '安全', icon: ShieldCheck },
   { id: 'updates', label: '版本更新', icon: RefreshCw },
   { id: 'about', label: '关于', icon: Info }
+]
+
+interface SettingsTabGroup {
+  id: string
+  title: string
+  items: Array<{
+    id: SettingsTab
+    label: string
+    icon: React.ElementType
+  }>
+}
+
+const settingsTabGroups: SettingsTabGroup[] = [
+  {
+    id: 'general',
+    title: '通用 General',
+    items: [
+      { id: 'appearance', label: '外观', icon: Palette },
+      { id: 'notification', label: '通知', icon: Bell },
+      { id: 'antiRevoke', label: '防撤回', icon: RotateCcw },
+      { id: 'updates', label: '版本更新', icon: RefreshCw },
+      { id: 'about', label: '关于', icon: Info }
+    ]
+  },
+  {
+    id: 'core_ai',
+    title: '核心与模型 Core & AI',
+    items: [
+      { id: 'models', label: '模型管理', icon: Mic },
+      { id: 'aiCommon', label: 'AI 基础配置', icon: Sparkles },
+      { id: 'insight', label: 'AI 见解', icon: UserRound },
+      { id: 'aiFootprint', label: 'AI 足迹', icon: Sparkles },
+      { id: 'aiGroupSummary', label: '群聊总结', icon: Sparkles },
+      { id: 'aiMessageInsight', label: '消息解析', icon: Sparkles }
+    ]
+  },
+  {
+    id: 'data_utils',
+    title: '数据与工具 Data & Utils',
+    items: [
+      { id: 'database', label: '数据库连接', icon: Database },
+      { id: 'cache', label: '缓存', icon: HardDrive },
+      { id: 'autoDownload', label: '自动下载', icon: Download },
+      { id: 'api', label: 'API 服务', icon: Globe },
+      { id: 'analytics', label: '分析', icon: BarChart2 }
+    ]
+  },
+  {
+    id: 'system_security',
+    title: '系统与安全 System & Security',
+    items: [
+      { id: 'security', label: '安全', icon: ShieldCheck }
+    ]
+  }
 ]
 
 const getSessionDisplayName = (session: Pick<ChatSession, 'username' | 'displayName'>): string =>
@@ -125,6 +180,153 @@ interface SettingsPageProps {
   onClose?: () => void
 }
 
+interface SettingsModalShellProps {
+  children: ReactNode
+  isClosing?: boolean
+  layeredContent?: ReactNode
+  layeredContentLabel?: string
+  onClose: () => void
+  onLayeredContentClose?: () => void
+}
+
+const SETTINGS_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
+export function SettingsModalShell({
+  children,
+  isClosing = false,
+  layeredContent,
+  layeredContentLabel,
+  onClose,
+  onLayeredContentClose
+}: SettingsModalShellProps) {
+  const layerRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const layeredDialogRef = useRef<HTMLDivElement>(null)
+  const hasLayeredContent = Boolean(layeredContent)
+  const hasLayeredContentRef = useRef(hasLayeredContent)
+  const hadLayeredContentRef = useRef(false)
+  const onCloseRef = useRef(onClose)
+  const onLayeredContentCloseRef = useRef(onLayeredContentClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+    onLayeredContentCloseRef.current = onLayeredContentClose
+    hasLayeredContentRef.current = hasLayeredContent
+  }, [hasLayeredContent, onClose, onLayeredContentClose])
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const activeDialog = () => hasLayeredContentRef.current
+      ? layeredDialogRef.current
+      : panelRef.current
+    const focusableElements = () => Array.from(
+      activeDialog()?.querySelectorAll<HTMLElement>(SETTINGS_FOCUSABLE_SELECTOR) ?? []
+    ).filter((element) => element.tabIndex >= 0 && element.getAttribute('aria-hidden') !== 'true')
+
+    const initialFocusTarget = focusableElements()[0] ?? panelRef.current
+    initialFocusTarget?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+        if (hasLayeredContentRef.current) {
+          onLayeredContentCloseRef.current?.()
+        } else {
+          onCloseRef.current()
+        }
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const elements = focusableElements()
+      if (elements.length === 0) {
+        event.preventDefault()
+        activeDialog()?.focus()
+        return
+      }
+
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      const activeElement = document.activeElement
+      if (event.shiftKey && (activeElement === first || !activeDialog()?.contains(activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (activeElement === last || !activeDialog()?.contains(activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true)
+      if (previouslyFocused?.isConnected) previouslyFocused.focus()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (hasLayeredContent) {
+      const firstLayeredControl = layeredDialogRef.current
+        ?.querySelector<HTMLElement>(SETTINGS_FOCUSABLE_SELECTOR)
+      const layeredFocusTarget = firstLayeredControl ?? layeredDialogRef.current
+      layeredFocusTarget?.focus()
+    } else if (hadLayeredContentRef.current) {
+      const firstSettingsControl = panelRef.current
+        ?.querySelector<HTMLElement>(SETTINGS_FOCUSABLE_SELECTOR)
+      const settingsFocusTarget = firstSettingsControl ?? panelRef.current
+      settingsFocusTarget?.focus()
+    }
+    hadLayeredContentRef.current = hasLayeredContent
+  }, [hasLayeredContent])
+
+  return createPortal(
+    <div ref={layerRef} className="settings-modal-layer">
+      <div
+        className={`settings-modal-overlay ${isClosing ? 'closing' : ''}`}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose()
+        }}
+      >
+        <div
+          ref={panelRef}
+          className={`settings-page ${isClosing ? 'closing' : ''}`}
+          role="dialog"
+          aria-modal={hasLayeredContent ? undefined : 'true'}
+          aria-hidden={hasLayeredContent ? 'true' : undefined}
+          inert={hasLayeredContent}
+          aria-label="设置"
+          tabIndex={-1}
+        >
+          {children}
+        </div>
+      </div>
+      {hasLayeredContent && (
+        <div
+          ref={layeredDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={layeredContentLabel}
+          tabIndex={-1}
+        >
+          {layeredContent}
+        </div>
+      )}
+    </div>,
+    document.body
+  )
+}
+
 function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const location = useLocation()
   const {
@@ -157,6 +359,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const clearAnalyticsStoreCache = useAnalyticsStore((state) => state.clearCache)
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const [sidebarSearchKeyword, setSidebarSearchKeyword] = useState('')
   const [aiGroupExpanded, setAiGroupExpanded] = useState(false)
   const [decryptKey, setDecryptKey] = useState('')
   const [imageXorKey, setImageXorKey] = useState('')
@@ -398,17 +601,6 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       setAiGroupExpanded(true)
     }
   }, [activeTab])
-
-  useEffect(() => {
-    if (!onClose) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        handleClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
 
   useEffect(() => {
     const removeDb = window.electronAPI.key.onDbKeyStatus((payload: { message: string; level: number }) => {
@@ -839,7 +1031,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   }
 
   const handleClose = () => {
-    if (!onClose) return
+    if (!onClose || isClosing) return
     setIsClosing(true)
     setTimeout(() => {
       onClose()
@@ -1153,10 +1345,12 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     setImageAesKey(keys.imageAesKey)
   }
 
-  const syncKeysToConfig = async (keys: WxidKeys) => {
-    await configService.setDecryptKey(keys.decryptKey)
-    await configService.setImageXorKey(typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0)
-    await configService.setImageAesKey(keys.imageAesKey)
+  const syncKeysToConfig = async (keys: WxidKeys, expectedAccountId: string) => {
+    await configService.patchAccountBundle({
+      decryptKey: keys.decryptKey,
+      imageXorKey: typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0,
+      imageAesKey: keys.imageAesKey
+    }, expectedAccountId)
   }
 
   const applyWxidSelection = async (
@@ -1183,8 +1377,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
     setWxid(selectedWxid)
     applyKeysToState(keys)
-    await configService.setMyWxid(selectedWxid)
-    await syncKeysToConfig(keys)
+    await configService.setAccountBundle({ myWxid: selectedWxid, dbPath, decryptKey: keys.decryptKey, imageXorKey: typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0, imageAesKey: keys.imageAesKey, cachePath: String(await configService.getCachePath() || ''), lastOpenedDb: dbPath })
     await configService.setWxidConfig(selectedWxid, {
       decryptKey: keys.decryptKey,
       imageXorKey: typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0,
@@ -1436,8 +1629,8 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
   const syncCurrentKeys = async (options?: { decryptKey?: string; imageXorKey?: string; imageAesKey?: string; wxid?: string }) => {
     const keys = buildKeysFromInputs(options)
-    await syncKeysToConfig(keys)
     const wxidToUse = options?.wxid ?? wxid
+    if (wxidToUse) await syncKeysToConfig(keys, wxidToUse)
     if (wxidToUse) {
       await configService.setWxidConfig(wxidToUse, {
         decryptKey: keys.decryptKey,
@@ -1931,49 +2124,65 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
     return (
       <div className="tab-content">
-        <div className="form-group">
-          <label>新消息通知</label>
-          <span className="form-hint">开启后，收到新消息时将显示桌面弹窗通知</span>
-          <div className="log-toggle-line">
-            <span className="log-status">{notificationEnabled ? '已开启' : '已关闭'}</span>
-            <label className="switch" htmlFor="notification-enabled-toggle">
-              <input
-                id="notification-enabled-toggle"
-                className="switch-input"
-                type="checkbox"
-                checked={notificationEnabled}
-                onChange={async (e) => {
-                  const val = e.target.checked
-                  setNotificationEnabled(val)
-                  await configService.setNotificationEnabled(val)
-                  showMessage(val ? '已开启通知' : '已关闭通知', true)
-                }}
-              />
-              <span className="switch-slider" />
-            </label>
+        <div className="mac-settings-card-group">
+          <div className="mac-settings-row">
+            <div className="mac-row-left">
+              <div className="mac-row-icon badge-notification">
+                <Bell size={16} />
+              </div>
+              <div className="mac-row-text">
+                <span className="mac-row-title">新消息通知</span>
+                <span className="mac-row-desc">开启后，收到新消息时将显示桌面弹窗通知</span>
+              </div>
+            </div>
+            <div className="mac-row-right">
+              <span className="log-status">{notificationEnabled ? '已开启' : '已关闭'}</span>
+              <label className="switch" htmlFor="notification-enabled-toggle">
+                <input
+                  id="notification-enabled-toggle"
+                  className="switch-input"
+                  type="checkbox"
+                  checked={notificationEnabled}
+                  onChange={async (e) => {
+                    const val = e.target.checked
+                    setNotificationEnabled(val)
+                    await configService.setNotificationEnabled(val)
+                    showMessage(val ? '已开启通知' : '已关闭通知', true)
+                  }}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div className="form-group">
-          <label>AI 见解消息通知</label>
-          <span className="form-hint">仅控制 AI 见解弹窗，不影响新消息通知、会话过滤或 Telegram 推送</span>
-          <div className="log-toggle-line">
-            <span className="log-status">{aiInsightNotificationEnabled ? '已开启' : '已关闭'}</span>
-            <label className="switch" htmlFor="ai-insight-notification-enabled-toggle">
-              <input
-                id="ai-insight-notification-enabled-toggle"
-                className="switch-input"
-                type="checkbox"
-                checked={aiInsightNotificationEnabled}
-                onChange={async (e) => {
-                  const val = e.target.checked
-                  setAiInsightNotificationEnabled(val)
-                  await configService.setAiInsightNotificationEnabled(val)
-                  showMessage(val ? '已开启 AI 见解消息通知' : '已关闭 AI 见解消息通知', true)
-                }}
-              />
-              <span className="switch-slider" />
-            </label>
+          <div className="mac-settings-row">
+            <div className="mac-row-left">
+              <div className="mac-row-icon badge-notification">
+                <Bell size={16} />
+              </div>
+              <div className="mac-row-text">
+                <span className="mac-row-title">AI 见解消息通知</span>
+                <span className="mac-row-desc">仅控制 AI 见解弹窗，不影响新消息通知、会话过滤或 Telegram 推送</span>
+              </div>
+            </div>
+            <div className="mac-row-right">
+              <span className="log-status">{aiInsightNotificationEnabled ? '已开启' : '已关闭'}</span>
+              <label className="switch" htmlFor="ai-insight-notification-enabled-toggle">
+                <input
+                  id="ai-insight-notification-enabled-toggle"
+                  className="switch-input"
+                  type="checkbox"
+                  checked={aiInsightNotificationEnabled}
+                  onChange={async (e) => {
+                    const val = e.target.checked
+                    setAiInsightNotificationEnabled(val)
+                    await configService.setAiInsightNotificationEnabled(val)
+                    showMessage(val ? '已开启 AI 见解消息通知' : '已关闭 AI 见解消息通知', true)
+                  }}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
           </div>
         </div>
 
@@ -2478,8 +2687,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
                   })
                 }
                 if (value) {
-                  await configService.setMyWxid(value)
-                  await syncCurrentKeys({ wxid: value }) // Sync keys to the new wxid entry
+                  await applyWxidSelection(value, { showToast: false })
                 }
 
                 if (value && previousWxid !== value) {
@@ -5484,9 +5692,66 @@ JSON 输出格式：
   }
 
   return (
-    <>
-    <div className={`settings-modal-overlay ${isClosing ? 'closing' : ''}`} onClick={handleClose}>
-      <div className={`settings-page ${isClosing ? 'closing' : ''}`} onClick={(event) => event.stopPropagation()}>
+    <SettingsModalShell
+      onClose={handleClose}
+      isClosing={isClosing}
+      layeredContentLabel="微博 Cookie 设置"
+      onLayeredContentClose={() => {
+        void handleCloseWeiboCookieModal()
+      }}
+      layeredContent={showWeiboCookieModal && (
+        <div
+          className="social-cookie-modal-overlay"
+          onClick={(event) => {
+            event.stopPropagation()
+            void handleCloseWeiboCookieModal()
+          }}
+        >
+          <div className="settings-inline-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <Globe size={20} />
+              <h3>微博 Cookie（实验性）</h3>
+            </div>
+            <div className="modal-body">
+              <p className="warning-text">
+                仅用于微博公开内容补充分析，全局生效，不会写入仓库。支持直接粘贴浏览器导出的 Cookie JSON 数组，也支持原始 <code>name=value</code> 字符串。
+              </p>
+              <textarea
+                className="social-cookie-textarea"
+                value={weiboCookieDraft}
+                placeholder="粘贴微博 Cookie，关闭弹层时自动保存"
+                onChange={(event) => {
+                  setWeiboCookieDraft(event.target.value)
+                  setWeiboCookieError('')
+                }}
+              />
+              {weiboCookieError && (
+                <div className="social-inline-error">{weiboCookieError}</div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => void handleCloseWeiboCookieModal(true)}>
+                取消更改
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={async () => {
+                  setWeiboCookieDraft('')
+                  const ok = await persistWeiboCookieDraft('')
+                  if (ok) setShowWeiboCookieModal(false)
+                }}
+                disabled={isSavingWeiboCookie || !aiInsightWeiboCookie}
+              >
+                清空
+              </button>
+              <button className="btn btn-primary" onClick={() => { void handleCloseWeiboCookieModal() }} disabled={isSavingWeiboCookie}>
+                {isSavingWeiboCookie ? '保存中...' : '关闭并保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    >
         {message && <div className={`message-toast ${message.success ? 'success' : 'error'}`}>{message.text}</div>}
 
         {/* 多账号选择对话框 */}
@@ -5541,51 +5806,78 @@ JSON 输出格式：
 
         <div className="settings-layout">
           <div className="settings-tabs" role="tablist" aria-label="设置项">
-            {filteredTabs.flatMap((tab) => {
-              const row: React.ReactNode[] = [
-                <button
-                  key={tab.id}
-                  className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <tab.icon size={16} />
-                  <span>{tab.label}</span>
-                </button>
-              ]
+            <div className="sidebar-search-container">
+              <div className="sidebar-search-box">
+                <Search size={14} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="搜索设置..."
+                  value={sidebarSearchKeyword}
+                  onChange={(e) => setSidebarSearchKeyword(e.target.value)}
+                />
+                {sidebarSearchKeyword && (
+                  <button
+                    type="button"
+                    className="clear-search-btn"
+                    onClick={() => setSidebarSearchKeyword('')}
+                    aria-label="清空搜索"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
 
-              if (tab.id === 'analytics') {
-                row.push(
-                  <div key="ai-settings-group" className={`tab-group ${aiGroupExpanded ? 'expanded' : ''}`}>
-                    <button
-                      className={`tab-btn tab-group-trigger ${(activeTab === 'aiCommon' || activeTab === 'insight' || activeTab === 'aiFootprint' || activeTab === 'aiGroupSummary' || activeTab === 'aiMessageInsight') ? 'active' : ''}`}
-                      onClick={() => setAiGroupExpanded((prev) => !prev)}
-                      aria-expanded={aiGroupExpanded}
-                    >
-                      <Sparkles size={16} />
-                      <span>AI 设置</span>
-                      <ChevronDown size={14} className={`tab-group-arrow ${aiGroupExpanded ? 'expanded' : ''}`} />
-                    </button>
-                    <div className={`tab-sublist-wrap ${aiGroupExpanded ? 'expanded' : 'collapsed'}`}>
-                      <div className="tab-sublist">
-                        {aiTabs.map((tab) => (
+            <div className="account-profile-capsule">
+              <Avatar name={wxid || 'default'} size={32} />
+              <div className="profile-info">
+                <span className="profile-name">{wxid || '当前微信账号'}</span>
+                <span className="profile-status">
+                  {isDbConnected ? '数据库已连接' : '未连接数据库'}
+                </span>
+              </div>
+            </div>
+
+            <div className="sidebar-groups-container">
+              {settingsTabGroups.map((group) => {
+                const matchingItems = group.items.filter((item) => {
+                  if (item.id === 'autoDownload') {
+                    const isWin64 =
+                      (window as any).electronAPI?.process?.platform === 'win32' &&
+                      (window as any).electronAPI?.process?.arch === 'x64'
+                    if (!isWin64) return false
+                  }
+                  if (!sidebarSearchKeyword.trim()) return true
+                  return item.label.toLowerCase().includes(sidebarSearchKeyword.trim().toLowerCase())
+                })
+
+                if (matchingItems.length === 0) return null
+
+                return (
+                  <div key={group.id} className="sidebar-group">
+                    <div className="sidebar-group-title">{group.title}</div>
+                    <div className="sidebar-group-items">
+                      {matchingItems.map((item) => {
+                        const ItemIcon = item.icon
+                        const isActive = activeTab === item.id
+                        return (
                           <button
-                            key={tab.id}
-                            className={`tab-btn tab-sub-btn ${activeTab === tab.id ? 'active' : ''}`}
-                            onClick={() => setActiveTab(tab.id)}
-                            tabIndex={aiGroupExpanded ? 0 : -1}
+                            key={item.id}
+                            className={`tab-btn ${isActive ? 'active' : ''}`}
+                            onClick={() => setActiveTab(item.id)}
+                            role="tab"
+                            aria-selected={isActive}
                           >
-                            <span className="tab-sub-dot" />
-                            <span>{tab.label}</span>
+                            <ItemIcon size={16} className="tab-icon" />
+                            <span>{item.label}</span>
                           </button>
-                        ))}
-                      </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )
-              }
-
-              return row
-            })}
+              })}
+            </div>
           </div>
 
           <div className="settings-body">
@@ -5608,78 +5900,11 @@ JSON 输出格式：
             {activeTab === 'about' && renderAboutTab()}
           </div>
         </div>
-      </div>
-    </div>
-
-      {showWeiboCookieModal && (
-        <div
-          className="social-cookie-modal-overlay"
-          onClick={(e) => {
-            e.stopPropagation()
-            void handleCloseWeiboCookieModal()
-          }}
-        >
-          <div className="settings-inline-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <Globe size={20} />
-              <h3>微博 Cookie（实验性）</h3>
-            </div>
-            <div className="modal-body">
-              <p className="warning-text">
-                仅用于微博公开内容补充分析，全局生效，不会写入仓库。支持直接粘贴浏览器导出的 Cookie JSON 数组，也支持原始 <code>name=value</code> 字符串。
-              </p>
-              <textarea
-                className="social-cookie-textarea"
-                value={weiboCookieDraft}
-                placeholder="粘贴微博 Cookie，关闭弹层时自动保存"
-                onChange={(e) => {
-                  setWeiboCookieDraft(e.target.value)
-                  setWeiboCookieError('')
-                }}
-              />
-              {weiboCookieError && (
-                <div className="social-inline-error">{weiboCookieError}</div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => void handleCloseWeiboCookieModal(true)}>
-                取消更改
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={async () => {
-                  setWeiboCookieDraft('')
-                  const ok = await persistWeiboCookieDraft('')
-                  if (ok) setShowWeiboCookieModal(false)
-                }}
-                disabled={isSavingWeiboCookie || !aiInsightWeiboCookie}
-              >
-                清空
-              </button>
-              <button className="btn btn-primary" onClick={() => { void handleCloseWeiboCookieModal() }} disabled={isSavingWeiboCookie}>
-                {isSavingWeiboCookie ? '保存中...' : '关闭并保存'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </>
+    </SettingsModalShell>
   )
 }
 
 export default SettingsPage
-
-
-
-
-
-
-
-
-
-
-
 
 
 

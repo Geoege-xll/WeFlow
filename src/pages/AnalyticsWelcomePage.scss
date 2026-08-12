@@ -1,118 +1,127 @@
 .analytics-welcome-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  height: 100%;
+  padding: 16px 20px;
+  background: var(--bg-primary);
+  box-sizing: border-box;
 }
 
 .analytics-welcome-body {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    min-height: 0;
-    padding: 40px 24px;
-    animation: welcomeFadeIn 0.4s ease-out;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 24px 20px;
+  animation: welcomeFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .analytics-welcome-content {
-    text-align: center;
-    max-width: 480px;
-    width: 100%;
+  text-align: center;
+  max-width: 520px;
+  width: 100%;
 }
 
 .analytics-welcome-icon {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 20px;
-    background: var(--primary-light);
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--primary);
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 15%, transparent);
 }
 
 .analytics-welcome-content h1 {
-    font-size: 24px;
-    font-weight: 700;
-    margin: 0 0 10px;
-    color: var(--text-primary);
-    letter-spacing: -0.3px;
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .analytics-welcome-content p {
-    color: var(--text-secondary);
-    margin: 0 0 32px;
-    font-size: 14px;
-    line-height: 1.7;
+  color: var(--text-tertiary);
+  margin: 0 0 32px;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .analytics-welcome-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
 .analytics-welcome-card {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+
+  &:hover {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    cursor: pointer;
-    text-align: left;
-    color: var(--text-secondary);
-    transition: background 0.15s ease, border-color 0.15s ease;
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--border-color));
+    color: var(--primary);
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  }
 
-    &:hover {
-        background: var(--bg-hover);
-        border-color: var(--text-tertiary);
-        color: var(--primary);
-    }
-
-    svg {
-        flex-shrink: 0;
-    }
+  svg {
+    flex-shrink: 0;
+  }
 }
 
 .analytics-welcome-card-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .analytics-welcome-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .analytics-welcome-card-meta {
-    font-size: 12px;
-    color: var(--text-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 540px) {
-    .analytics-welcome-actions {
-        grid-template-columns: 1fr;
-    }
+@media (max-width: 580px) {
+  .analytics-welcome-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes welcomeFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

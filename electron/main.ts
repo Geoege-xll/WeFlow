@@ -1,5 +1,6 @@
+import './safe-console'
 import './preload-env'
-import { app, BrowserWindow, ipcMain, nativeTheme, session, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, session, Tray, Menu, nativeImage, screen } from 'electron'
 import { Worker } from 'worker_threads'
 import { randomUUID } from 'crypto'
 import { join, dirname } from 'path'
@@ -38,6 +39,11 @@ import { normalizeWeiboCookieInput, weiboService } from './services/social/weibo
 import { bizService } from './services/bizService'
 import { backupService } from './services/backupService'
 import { imageDownloadService } from './services/imageDownloadService'
+import { getOmniMindService } from './omnimind/omnimind-service'
+import { sendOmniMindSnapshotToMainWindow } from './omnimind/snapshot-target'
+import { parseAccountConfigBundle, parseAccountConfigPatch } from '../shared/omnimind/account-bundle'
+import { registerOmniMindIpc } from './omnimind/register-omnimind-ipc'
+import { calculateInitialWindowBounds } from './windowGeometry'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -932,8 +938,11 @@ const isYearsLoadCanceled = (taskId: string): boolean => {
   return task?.canceled === true
 }
 
-const setupCustomTitleBarWindow = (win: BrowserWindow): void => {
-  if (process.platform === 'darwin') {
+const setupCustomTitleBarWindow = (
+  win: BrowserWindow,
+  { hideMacWindowButtons = true }: { hideMacWindowButtons?: boolean } = {}
+): void => {
+  if (process.platform === 'darwin' && hideMacWindowButtons) {
     win.setWindowButtonVisibility(false)
   }
 
@@ -1082,12 +1091,16 @@ function createWindow(options: { autoShow?: boolean } = {}) {
   // 获取图标路径 - 打包后在 resources 目录
   const { autoShow = true } = options
   const iconPath = resolveAppIconPath()
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) || screen.getPrimaryDisplay()
+  const bounds = calculateInitialWindowBounds(display.workArea)
 
   const win = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1000,
-    minHeight: 700,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    minWidth: bounds.minWidth,
+    minHeight: bounds.minHeight,
     icon: iconPath,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -1099,6 +1112,7 @@ function createWindow(options: { autoShow?: boolean } = {}) {
     show: false
   })
   setupCustomTitleBarWindow(win)
+  win.on('focus', () => { void getOmniMindService().refreshPermissionsAfterNativeReturn() })
 
   // 窗口准备好后显示
   // Splash 模式下不在这里 show，由启动流程统一控制
@@ -2000,12 +2014,22 @@ function registerIpcHandlers() {
   registerNotificationHandlers()
   ensureNotificationNavigateHandlerRegistered()
   bizService.registerHandlers()
+  // === OMNIMIND HOOK ===
+  const omniMindService = getOmniMindService()
+  registerOmniMindIpc(ipcMain, omniMindService)
+  omniMindService.setSnapshotBroadcaster((snapshot) => {
+    sendOmniMindSnapshotToMainWindow(mainWindow, snapshot)
+  })
+  omniMindService.setPermissionBroadcaster((permissionEvent) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('omnimind:permissionsChanged', permissionEvent)
+  })
   // 配置相关
   ipcMain.handle('config:get', async (_, key: string) => {
     return configService?.get(key as any)
   })
 
   ipcMain.handle('config:set', async (_, key: string, value: any) => {
+    if (['myWxid', 'dbPath', 'decryptKey', 'imageXorKey', 'imageAesKey'].includes(key)) throw new Error('Use account:setBundle for account identity configuration')
     let result: unknown
     if (key === 'launchAtStartup') {
       result = applyLaunchAtStartupPreference(value === true)
@@ -2019,6 +2043,16 @@ function registerIpcHandlers() {
     void insightService.handleConfigChanged(key)
     void groupSummaryService.handleConfigChanged(key)
     return result
+  })
+  ipcMain.handle('account:setBundle', async (_, payload: unknown) => {
+    const bundle = parseAccountConfigBundle(payload)
+    if (!configService) throw new Error('Config service is not initialized')
+    const isCurrentBundle = () => ['myWxid', 'dbPath', 'decryptKey', 'imageXorKey', 'imageAesKey', 'cachePath', 'lastOpenedDb'].every((key) => configService!.get(key as any) === bundle[key as keyof typeof bundle])
+    await omniMindService.switchAccount(bundle.myWxid, () => configService!.setAccountBundle(bundle), isCurrentBundle)
+  })
+  ipcMain.handle('account:patchBundle', async (_, payload: unknown) => {
+    const parsed = parseAccountConfigPatch(payload)
+    await omniMindService.patchAccount(parsed.patch, parsed.expectedAccountId)
   })
 
   // AI 见解
@@ -2183,8 +2217,7 @@ function registerIpcHandlers() {
         console.error('[WeFlow] 清空配置时关闭开机自启动失败:', result.error)
       }
     }
-    configService?.clear()
-    messagePushService.handleConfigCleared()
+    await omniMindService.switchAccount('', () => configService?.clear())
     insightService.handleConfigCleared()
     groupSummaryService.handleConfigCleared()
     return true
@@ -2836,6 +2869,8 @@ function registerIpcHandlers() {
     const removedPaths: string[] = []
     const warnings: string[] = []
 
+    return omniMindService.switchAccount(clearCache ? '' : String(cfg.get('myWxid') || ''), async () => {
+
     try {
       wcdbService.close()
       chatService.close()
@@ -2959,12 +2994,7 @@ function registerIpcHandlers() {
           }
           cfg.set('wxidConfigs' as any, nextConfigs as any)
         }
-        cfg.set('myWxid' as any, '')
-        cfg.set('decryptKey' as any, '')
-        cfg.set('imageXorKey' as any, 0)
-        cfg.set('imageAesKey' as any, '')
-        cfg.set('dbPath' as any, '')
-        cfg.set('lastOpenedDb' as any, '')
+        cfg.setAccountBundle({ myWxid: '', decryptKey: '', imageXorKey: 0, imageAesKey: '', dbPath: '', lastOpenedDb: '', cachePath: String(cfg.get('cachePath') || '') })
         cfg.set('onboardingDone' as any, false)
         cfg.set('lastSession' as any, '')
       } catch (error) {
@@ -2973,10 +3003,12 @@ function registerIpcHandlers() {
     }
 
     return {
-      success: true,
+      success: warnings.length === 0,
       removedPaths,
-      warning: warnings.length > 0 ? warnings.join('; ') : undefined
+      warning: warnings.length > 0 ? warnings.join('; ') : undefined,
+      error: warnings.length > 0 ? warnings.join('; ') : undefined
     }
+    })
   })
 
   ipcMain.handle('chat:getSessionDetail', async (_, sessionId: string) => {
@@ -4740,6 +4772,7 @@ app.whenReady().then(async () => {
   await httpService.autoStart()
 
   app.on('activate', () => {
+    void getOmniMindService().refreshPermissionsAfterNativeReturn()
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (!mainWindow.isVisible()) {
         mainWindow.show()
@@ -4763,6 +4796,7 @@ const shutdownAppServices = async (): Promise<void> => {
     // 通知窗使用 hide 而非 close，退出时主动销毁，避免残留窗口阻塞进程退出。
     destroyNotificationWindow()
     messagePushService.stop()
+    try { await getOmniMindService().disable() } catch {}
     insightService.stop()
     groupSummaryService.stop()
     // 兜底：5秒后强制退出，防止某个异步任务卡住导致进程残留

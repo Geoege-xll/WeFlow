@@ -9,6 +9,7 @@ import { ContactSnsTimelineDialog } from '../components/Sns/ContactSnsTimelineDi
 import type { ContactSnsTimelineTarget } from '../components/Sns/contactSnsTimeline'
 import JumpToDatePopover from '../components/JumpToDatePopover'
 import { ExportDateRangeDialog } from '../components/Export/ExportDateRangeDialog'
+import { WeFlowCard, WeFlowDialog } from '../components/common'
 import * as configService from '../services/config'
 import {
     finishBackgroundTask,
@@ -2311,102 +2312,24 @@ export default function SnsPage() {
             />
 
             {debugPost && (
-                <div className="modal-overlay" onClick={() => setDebugPost(null)}>
-                    <div className="debug-dialog" onClick={(e) => e.stopPropagation()}>
-                        <div className="debug-dialog-header">
-                            <h3>原始数据</h3>
-                            <button className="close-btn" onClick={() => setDebugPost(null)}>
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="debug-dialog-body">
-                            <pre className="json-code">
-                                {JSON.stringify(debugPost, null, 2)}
-                            </pre>
-                        </div>
-                    </div>
-                </div>
+                <WeFlowDialog
+                    open={Boolean(debugPost)}
+                    onClose={() => setDebugPost(null)}
+                    title="原始数据"
+                >
+                    <pre className="json-code">
+                        {JSON.stringify(debugPost, null, 2)}
+                    </pre>
+                </WeFlowDialog>
             )}
 
             {showCacheMigrationDialog && cacheMigrationStatus && (
-                <div
-                    className="modal-overlay"
-                    onClick={() => {
-                        if (cacheMigrationRunning) return
-                        setShowCacheMigrationDialog(false)
-                    }}
-                >
-                    <div className="sns-cache-migration-dialog" onClick={(e) => e.stopPropagation()}>
-                        <button
-                            className="close-btn sns-cache-migration-close"
-                            onClick={() => !cacheMigrationRunning && setShowCacheMigrationDialog(false)}
-                            disabled={cacheMigrationRunning}
-                        >
-                            <X size={18} />
-                        </button>
-
-                        <div className="sns-cache-migration-header">
-                            <div className="sns-cache-migration-title">发现旧版朋友圈缓存</div>
-                            <div className="sns-cache-migration-subtitle">
-                                建议迁移到当前缓存目录，避免目录分散和重复占用空间
-                            </div>
-                        </div>
-
-                        <div className="sns-cache-migration-body">
-                            <div className="sns-cache-migration-meta">
-                                <span>待处理文件</span>
-                                <strong>{cacheMigrationStatus.totalFiles}</strong>
-                            </div>
-
-                            {cacheMigrationProgress && (
-                                <div className="sns-cache-migration-progress">
-                                    <div className="sns-cache-migration-progress-bar">
-                                        <div
-                                            className="sns-cache-migration-progress-fill"
-                                            style={{
-                                                width: cacheMigrationProgress.total > 0
-                                                    ? `${Math.min(100, Math.round((cacheMigrationProgress.current / cacheMigrationProgress.total) * 100))}%`
-                                                    : '100%'
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="sns-cache-migration-progress-text">
-                                        <span>{cacheMigrationProgress.message || '迁移中...'}</span>
-                                        <span>
-                                            已迁移 {cacheMigrationProgress.copied}，剩余 {cacheMigrationProgress.remaining}，跳过重复 {cacheMigrationProgress.skipped}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {!cacheMigrationProgress && (
-                                <div className="sns-cache-migration-items">
-                                    {cacheMigrationStatus.items.map((item, idx) => (
-                                        <div className="sns-cache-migration-item" key={`${item.label}-${idx}`}>
-                                            <div className="sns-cache-migration-item-title">{item.label}</div>
-                                            <div className="sns-cache-migration-item-detail">
-                                                {item.fileCount} 个文件 · {item.sourceDir} → {item.targetDir}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {cacheMigrationError && (
-                                <div className="sns-cache-migration-error">
-                                    <AlertCircle size={14} />
-                                    <span>{cacheMigrationError}</span>
-                                </div>
-                            )}
-
-                            {cacheMigrationDone && !cacheMigrationError && (
-                                <div className="sns-cache-migration-success">
-                                    <CheckCircle size={14} />
-                                    <span>迁移完成，旧目录已清理。</span>
-                                </div>
-                            )}
-                        </div>
-
+                <WeFlowDialog
+                    open={showCacheMigrationDialog}
+                    onClose={() => !cacheMigrationRunning && setShowCacheMigrationDialog(false)}
+                    title="发现旧版朋友圈缓存"
+                    subtitle="建议迁移到当前缓存目录，避免目录分散和重复占用空间"
+                    footer={
                         <div className="sns-cache-migration-actions">
                             {!cacheMigrationDone ? (
                                 <>
@@ -2435,48 +2358,73 @@ export default function SnsPage() {
                                 </button>
                             )}
                         </div>
+                    }
+                >
+                    <div className="sns-cache-migration-body">
+                        <div className="sns-cache-migration-meta">
+                            <span>待处理文件</span>
+                            <strong>{cacheMigrationStatus.totalFiles}</strong>
+                        </div>
+
+                        {cacheMigrationProgress && (
+                            <div className="sns-cache-migration-progress">
+                                <div className="sns-cache-migration-progress-bar">
+                                    <div
+                                        className="sns-cache-migration-progress-fill"
+                                        style={{
+                                            width: cacheMigrationProgress.total > 0
+                                                ? `${Math.min(100, Math.round((cacheMigrationProgress.current / cacheMigrationProgress.total) * 100))}%`
+                                                : '100%'
+                                        }}
+                                    />
+                                </div>
+                                <div className="sns-cache-migration-progress-text">
+                                    <span>{cacheMigrationProgress.message || '迁移中...'}</span>
+                                    <span>
+                                        已迁移 {cacheMigrationProgress.copied}，剩余 {cacheMigrationProgress.remaining}，跳过重复 {cacheMigrationProgress.skipped}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {!cacheMigrationProgress && (
+                            <div className="sns-cache-migration-items">
+                                {cacheMigrationStatus.items.map((item, idx) => (
+                                    <div className="sns-cache-migration-item" key={`${item.label}-${idx}`}>
+                                        <div className="sns-cache-migration-item-title">{item.label}</div>
+                                        <div className="sns-cache-migration-item-detail">
+                                            {item.fileCount} 个文件 · {item.sourceDir} → {item.targetDir}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {cacheMigrationError && (
+                            <div className="sns-cache-migration-error">
+                                <AlertCircle size={14} />
+                                <span>{cacheMigrationError}</span>
+                            </div>
+                        )}
+
+                        {cacheMigrationDone && !cacheMigrationError && (
+                            <div className="sns-cache-migration-success">
+                                <CheckCircle size={14} />
+                                <span>迁移完成，旧目录已清理。</span>
+                            </div>
+                        )}
                     </div>
-                </div>
+                </WeFlowDialog>
             )}
 
             {/* 朋友圈防删除插件对话框 */}
             {showTriggerDialog && (
-                <div className="modal-overlay" onClick={() => { setShowTriggerDialog(false); setTriggerMessage(null) }}>
-                    <div className="sns-protect-dialog" onClick={(e) => e.stopPropagation()}>
-                        <button className="close-btn sns-protect-close" onClick={() => { setShowTriggerDialog(false); setTriggerMessage(null) }}>
-                            <X size={18} />
-                        </button>
-
-                        {/* 顶部图标区 */}
-                        <div className="sns-protect-hero">
-                            <div className={`sns-protect-icon-wrap ${triggerInstalled ? 'active' : ''}`}>
-                                {triggerLoading
-                                    ? <RefreshCw size={28} className="spinning" />
-                                    : triggerInstalled
-                                        ? <Shield size={28} />
-                                        : <ShieldOff size={28} />
-                                }
-                            </div>
-                            <div className="sns-protect-title">朋友圈防删除</div>
-                            <div className={`sns-protect-status-badge ${triggerInstalled ? 'on' : 'off'}`}>
-                                {triggerLoading ? '检查中…' : triggerInstalled ? '已启用' : '未启用'}
-                            </div>
-                        </div>
-
-                        {/* 说明 */}
-                        <div className="sns-protect-desc">
-                            启用后，WeFlow将拦截朋友圈删除操作<br/>已同步的动态不会从本地数据库中消失<br/>新的动态仍可正常同步。
-                        </div>
-
-                        {/* 操作反馈 */}
-                        {triggerMessage && (
-                            <div className={`sns-protect-feedback ${triggerMessage.type}`}>
-                                {triggerMessage.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-                                <span>{triggerMessage.text}</span>
-                            </div>
-                        )}
-
-                        {/* 操作按钮 */}
+                <WeFlowDialog
+                    open={showTriggerDialog}
+                    onClose={() => { setShowTriggerDialog(false); setTriggerMessage(null) }}
+                    title="朋友圈防删除"
+                    subtitle="启用后，WeFlow将拦截朋友圈删除操作，已同步动态不会在本地消失"
+                    footer={
                         <div className="sns-protect-actions">
                             {!triggerInstalled ? (
                                 <button
@@ -2530,280 +2478,297 @@ export default function SnsPage() {
                                 </button>
                             )}
                         </div>
+                    }
+                >
+                    <div className="sns-protect-hero">
+                        <div className={`sns-protect-icon-wrap ${triggerInstalled ? 'active' : ''}`}>
+                            {triggerLoading
+                                ? <RefreshCw size={28} className="spinning" />
+                                : triggerInstalled
+                                    ? <Shield size={28} />
+                                    : <ShieldOff size={28} />
+                            }
+                        </div>
+                        <div className={`sns-protect-status-badge ${triggerInstalled ? 'on' : 'off'}`}>
+                            {triggerLoading ? '检查中…' : triggerInstalled ? '已启用' : '未启用'}
+                        </div>
                     </div>
-                </div>
+
+                    {triggerMessage && (
+                        <div className={`sns-protect-feedback ${triggerMessage.type}`}>
+                            {triggerMessage.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                            <span>{triggerMessage.text}</span>
+                        </div>
+                    )}
+                </WeFlowDialog>
             )}
 
             {/* 导出对话框 */}
             {showExportDialog && (
-                <div className="modal-overlay" onClick={() => !isExportLocked && setShowExportDialog(false)}>
-                    <div className="export-dialog" onClick={(e) => e.stopPropagation()}>
-                        <div className="export-dialog-header">
-                            <h3>导出朋友圈</h3>
-                            <button className="close-btn" onClick={() => !isExportLocked && setShowExportDialog(false)} disabled={isExportLocked}>
-                                <X size={20} />
-                            </button>
-                        </div>
+                <WeFlowDialog
+                    open={showExportDialog}
+                    onClose={() => !isExportLocked && setShowExportDialog(false)}
+                    title="导出朋友圈"
+                    size="lg"
+                >
+                    <div className="export-dialog-body">
+                        {/* 筛选条件提示 */}
+                        {(searchKeyword || exportScope.kind === 'selected') && (
+                            <div className="export-filter-info">
+                                <span className="filter-badge">导出范围</span>
+                                {exportScope.kind === 'selected' && (
+                                    <span className="filter-tag">联系人: {exportSelectedContactsSummary}</span>
+                                )}
+                                {searchKeyword && <span className="filter-tag">关键词: "{searchKeyword}"</span>}
+                            </div>
+                        )}
 
-                        <div className="export-dialog-body">
-                            {/* 筛选条件提示 */}
-                            {(searchKeyword || exportScope.kind === 'selected') && (
-                                <div className="export-filter-info">
-                                    <span className="filter-badge">导出范围</span>
-                                    {exportScope.kind === 'selected' && (
-                                        <span className="filter-tag">联系人: {exportSelectedContactsSummary}</span>
-                                    )}
-                                    {searchKeyword && <span className="filter-tag">关键词: "{searchKeyword}"</span>}
-                                </div>
-                            )}
-
-                            {!exportResult ? (
-                                <>
-                                    {/* 格式选择 */}
-                                    <div className="export-section">
-                                        <label className="export-label">导出格式</label>
-                                        <div className="export-format-options">
-                                            <button
-                                                className={`format-option ${exportFormat === 'html' ? 'active' : ''}`}
-                                                onClick={() => setExportFormat('html')}
-                                                disabled={isExportLocked}
-                                            >
-                                                <FileText size={20} />
-                                                <span>HTML</span>
-                                                <small>浏览器可直接查看</small>
-                                            </button>
-                                            <button
-                                                className={`format-option ${exportFormat === 'markdown' ? 'active' : ''}`}
-                                                onClick={() => setExportFormat('markdown')}
-                                                disabled={isExportLocked}
-                                            >
-                                                <FileCode size={20} />
-                                                <span>Markdown</span>
-                                                <small>纯文本，通用性强</small>
-                                            </button>
-                                            <button
-                                                className={`format-option ${exportFormat === 'json' ? 'active' : ''}`}
-                                                onClick={() => setExportFormat('json')}
-                                                disabled={isExportLocked}
-                                            >
-                                                <FileJson size={20} />
-                                                <span>JSON</span>
-                                                <small>结构化数据</small>
-                                            </button>
-                                            <button
-                                                className={`format-option ${exportFormat === 'arkmejson' ? 'active' : ''}`}
-                                                onClick={() => setExportFormat('arkmejson')}
-                                                disabled={isExportLocked}
-                                            >
-                                                <FileJson size={20} />
-                                                <span>ArkmeJSON</span>
-                                                <small>结构化数据（含互动身份）</small>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* 输出路径 */}
-                                    <div className="export-section">
-                                        <label className="export-label">输出目录</label>
-                                        <div className="export-path-row">
-                                            <input
-                                                type="text"
-                                                value={exportFolder}
-                                                readOnly
-                                                placeholder="点击选择输出目录..."
-                                                className="export-path-input"
-                                            />
-                                            <button
-                                                className="export-browse-btn"
-                                                onClick={async () => {
-                                                    const result = await window.electronAPI.sns.selectExportDir()
-                                                    if (!result.canceled && result.filePath) {
-                                                        setExportFolder(result.filePath)
-                                                    }
-                                                }}
-                                                disabled={isExportLocked}
-                                            >
-                                                <FolderOpen size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* 时间范围 */}
-                                    <div className="export-section">
-                                        <div className="export-section-header">
-                                            <label className="export-label"><Calendar size={14} /> 时间范围</label>
-                                            <button
-                                                type="button"
-                                                className="time-range-trigger sns-export-time-range-trigger"
-                                                onClick={() => {
-                                                    if (!isExportLocked) setIsExportDateRangeDialogOpen(true)
-                                                }}
-                                                disabled={isExportLocked}
-                                            >
-                                                <span>{exportDateRangeLabel}</span>
-                                                <span className="time-range-arrow">&gt;</span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* 媒体导出 */}
-                                    <div className="export-section">
-                                        <label className="export-label">
-                                            <Image size={14} />
-                                            媒体文件（可多选）
-                                        </label>
-                                        <div className="export-media-check-grid">
-                                            <label>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={exportImages}
-                                                    onChange={(e) => setExportImages(e.target.checked)}
-                                                    disabled={isExportLocked}
-                                                />
-                                                图片
-                                            </label>
-                                            <label>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={exportLivePhotos}
-                                                    onChange={(e) => setExportLivePhotos(e.target.checked)}
-                                                    disabled={isExportLocked}
-                                                />
-                                                实况图
-                                            </label>
-                                            <label>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={exportVideos}
-                                                    onChange={(e) => setExportVideos(e.target.checked)}
-                                                    disabled={isExportLocked}
-                                                />
-                                                视频
-                                            </label>
-                                        </div>
-                                        <p className="export-media-hint">全不勾选时仅导出文本信息，不导出媒体文件</p>
-                                    </div>
-
-                                    {/* 同步提示 */}
-                                    <div className="export-sync-hint">
-                                        <Info size={14} />
-                                        <span>{exportScope.kind === 'selected' ? '将同步主页面的关键词搜索，并仅导出所选联系人' : '将同步主页面的关键词搜索'}</span>
-                                    </div>
-
-                                    {/* 进度条 */}
-                                    {isExportLocked && exportProgress && (
-                                        <div className="export-progress">
-                                            <div className="export-progress-bar">
-                                                <div
-                                                    className="export-progress-fill"
-                                                    style={{ width: exportProgress.total > 0 ? `${Math.round((exportProgress.current / exportProgress.total) * 100)}%` : '100%' }}
-                                                />
-                                            </div>
-                                            <span className="export-progress-text">{exportProgress.status}</span>
-                                            <div className="export-progress-actions">
-                                                {canPauseExport && (
-                                                    <button
-                                                        type="button"
-                                                        className="export-progress-btn"
-                                                        onClick={handlePauseSnsExport}
-                                                    >
-                                                        <Pause size={14} />
-                                                        暂停
-                                                    </button>
-                                                )}
-                                                {canResumeExport && (
-                                                    <button
-                                                        type="button"
-                                                        className="export-progress-btn primary"
-                                                        onClick={handleResumeSnsExport}
-                                                    >
-                                                        <Play size={14} />
-                                                        继续
-                                                    </button>
-                                                )}
-                                                {canCancelExport && (
-                                                    <button
-                                                        type="button"
-                                                        className="export-progress-btn danger"
-                                                        onClick={handleCancelSnsExport}
-                                                        disabled={exportTaskStatus === 'cancel_requested'}
-                                                    >
-                                                        <Square size={14} />
-                                                        {exportTaskStatus === 'cancel_requested' ? '取消中' : '取消'}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* 操作按钮 */}
-                                    <div className="export-actions">
+                        {!exportResult ? (
+                            <>
+                                {/* 格式选择 */}
+                                <div className="export-section">
+                                    <label className="export-label">导出格式</label>
+                                    <div className="export-format-options">
                                         <button
-                                            className="export-cancel-btn"
-                                            onClick={() => setShowExportDialog(false)}
+                                            className={`format-option ${exportFormat === 'html' ? 'active' : ''}`}
+                                            onClick={() => setExportFormat('html')}
                                             disabled={isExportLocked}
                                         >
-                                            取消
+                                            <FileText size={20} />
+                                            <span>HTML</span>
+                                            <small>浏览器可直接查看</small>
                                         </button>
                                         <button
-                                            className="export-start-btn"
-                                            disabled={!canStartExport}
-                                            onClick={handleStartSnsExport}
+                                            className={`format-option ${exportFormat === 'markdown' ? 'active' : ''}`}
+                                            onClick={() => setExportFormat('markdown')}
+                                            disabled={isExportLocked}
                                         >
-                                            {isExporting ? '导出中...' : '开始导出'}
+                                            <FileCode size={20} />
+                                            <span>Markdown</span>
+                                            <small>纯文本，通用性强</small>
+                                        </button>
+                                        <button
+                                            className={`format-option ${exportFormat === 'json' ? 'active' : ''}`}
+                                            onClick={() => setExportFormat('json')}
+                                            disabled={isExportLocked}
+                                        >
+                                            <FileJson size={20} />
+                                            <span>JSON</span>
+                                            <small>结构化数据</small>
+                                        </button>
+                                        <button
+                                            className={`format-option ${exportFormat === 'arkmejson' ? 'active' : ''}`}
+                                            onClick={() => setExportFormat('arkmejson')}
+                                            disabled={isExportLocked}
+                                        >
+                                            <FileJson size={20} />
+                                            <span>ArkmeJSON</span>
+                                            <small>结构化数据（含互动身份）</small>
                                         </button>
                                     </div>
-                                </>
-                            ) : (
-                                /* 导出结果 */
-                                <div className="export-result">
-                                    {exportResult.success ? (
-                                        <>
-                                            <div className="export-result-icon success">
-                                                <CheckCircle size={48} />
-                                            </div>
-                                            <h4>导出成功</h4>
-                                            <p>共导出 {exportResult.postCount} 条动态{exportResult.mediaCount ? `，${exportResult.mediaCount} 个媒体文件` : ''}</p>
-                                            <div className="export-result-actions">
+                                </div>
+
+                                {/* 输出路径 */}
+                                <div className="export-section">
+                                    <label className="export-label">输出目录</label>
+                                    <div className="export-path-row">
+                                        <input
+                                            type="text"
+                                            value={exportFolder}
+                                            readOnly
+                                            placeholder="点击选择输出目录..."
+                                            className="export-path-input"
+                                        />
+                                        <button
+                                            className="export-browse-btn"
+                                            onClick={async () => {
+                                                const result = await window.electronAPI.sns.selectExportDir()
+                                                if (!result.canceled && result.filePath) {
+                                                    setExportFolder(result.filePath)
+                                                }
+                                            }}
+                                            disabled={isExportLocked}
+                                        >
+                                            <FolderOpen size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 时间范围 */}
+                                <div className="export-section">
+                                    <div className="export-section-header">
+                                        <label className="export-label"><Calendar size={14} /> 时间范围</label>
+                                        <button
+                                            type="button"
+                                            className="time-range-trigger sns-export-time-range-trigger"
+                                            onClick={() => {
+                                                if (!isExportLocked) setIsExportDateRangeDialogOpen(true)
+                                            }}
+                                            disabled={isExportLocked}
+                                        >
+                                            <span>{exportDateRangeLabel}</span>
+                                            <span className="time-range-arrow">&gt;</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 媒体导出 */}
+                                <div className="export-section">
+                                    <label className="export-label">
+                                        <Image size={14} />
+                                        媒体文件（可多选）
+                                    </label>
+                                    <div className="export-media-check-grid">
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                checked={exportImages}
+                                                onChange={(e) => setExportImages(e.target.checked)}
+                                                disabled={isExportLocked}
+                                            />
+                                            图片
+                                        </label>
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                checked={exportLivePhotos}
+                                                onChange={(e) => setExportLivePhotos(e.target.checked)}
+                                                disabled={isExportLocked}
+                                            />
+                                            实况图
+                                        </label>
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                checked={exportVideos}
+                                                onChange={(e) => setExportVideos(e.target.checked)}
+                                                disabled={isExportLocked}
+                                            />
+                                            视频
+                                        </label>
+                                    </div>
+                                    <p className="export-media-hint">全不勾选时仅导出文本信息，不导出媒体文件</p>
+                                </div>
+
+                                {/* 同步提示 */}
+                                <div className="export-sync-hint">
+                                    <Info size={14} />
+                                    <span>{exportScope.kind === 'selected' ? '将同步主页面的关键词搜索，并仅导出所选联系人' : '将同步主页面的关键词搜索'}</span>
+                                </div>
+
+                                {/* 进度条 */}
+                                {isExportLocked && exportProgress && (
+                                    <div className="export-progress">
+                                        <div className="export-progress-bar">
+                                            <div
+                                                className="export-progress-fill"
+                                                style={{ width: exportProgress.total > 0 ? `${Math.round((exportProgress.current / exportProgress.total) * 100)}%` : '100%' }}
+                                            />
+                                        </div>
+                                        <span className="export-progress-text">{exportProgress.status}</span>
+                                        <div className="export-progress-actions">
+                                            {canPauseExport && (
                                                 <button
-                                                    className="export-open-btn"
-                                                    onClick={() => {
-                                                        if (exportFolder) {
-                                                            window.electronAPI.shell.openPath(exportFolder)
-                                                        }
-                                                    }}
+                                                    type="button"
+                                                    className="export-progress-btn"
+                                                    onClick={handlePauseSnsExport}
                                                 >
-                                                    <FolderOpen size={16} />
-                                                    打开目录
+                                                    <Pause size={14} />
+                                                    暂停
                                                 </button>
+                                            )}
+                                            {canResumeExport && (
                                                 <button
-                                                    className="export-done-btn"
-                                                    onClick={() => setShowExportDialog(false)}
+                                                    type="button"
+                                                    className="export-progress-btn primary"
+                                                    onClick={handleResumeSnsExport}
                                                 >
-                                                    完成
+                                                    <Play size={14} />
+                                                    继续
                                                 </button>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="export-result-icon error">
-                                                <AlertCircle size={48} />
-                                            </div>
-                                            <h4>导出失败</h4>
-                                            <p className="error-text">{exportResult.error}</p>
+                                            )}
+                                            {canCancelExport && (
+                                                <button
+                                                    type="button"
+                                                    className="export-progress-btn danger"
+                                                    onClick={handleCancelSnsExport}
+                                                    disabled={exportTaskStatus === 'cancel_requested'}
+                                                >
+                                                    <Square size={14} />
+                                                    {exportTaskStatus === 'cancel_requested' ? '取消中' : '取消'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 操作按钮 */}
+                                <div className="export-actions">
+                                    <button
+                                        className="export-cancel-btn"
+                                        onClick={() => setShowExportDialog(false)}
+                                        disabled={isExportLocked}
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        className="export-start-btn"
+                                        disabled={!canStartExport}
+                                        onClick={handleStartSnsExport}
+                                    >
+                                        {isExporting ? '导出中...' : '开始导出'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            /* 导出结果 */
+                            <div className="export-result">
+                                {exportResult.success ? (
+                                    <>
+                                        <div className="export-result-icon success">
+                                            <CheckCircle size={48} />
+                                        </div>
+                                        <h4>导出成功</h4>
+                                        <p>共导出 {exportResult.postCount} 条动态{exportResult.mediaCount ? `，${exportResult.mediaCount} 个媒体文件` : ''}</p>
+                                        <div className="export-result-actions">
+                                            <button
+                                                className="export-open-btn"
+                                                onClick={() => {
+                                                    if (exportFolder) {
+                                                        window.electronAPI.shell.openPath(exportFolder)
+                                                    }
+                                                }}
+                                            >
+                                                <FolderOpen size={16} />
+                                                打开目录
+                                            </button>
                                             <button
                                                 className="export-done-btn"
-                                                onClick={() => setExportResult(null)}
+                                                onClick={() => setShowExportDialog(false)}
                                             >
-                                                重试
+                                                完成
                                             </button>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="export-result-icon error">
+                                            <AlertCircle size={48} />
+                                        </div>
+                                        <h4>导出失败</h4>
+                                        <p className="error-text">{exportResult.error}</p>
+                                        <button
+                                            className="export-done-btn"
+                                            onClick={() => setExportResult(null)}
+                                        >
+                                            重试
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
                     </div>
-                </div>
+                </WeFlowDialog>
             )}
 
             <ExportDateRangeDialog

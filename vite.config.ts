@@ -1,10 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import electron from 'vite-plugin-electron'
+import electron, { startup as electronStartup } from 'vite-plugin-electron'
 import { resolve } from 'path'
+import { createElectronRestartCoordinator, type ElectronStartOptions } from './electron/dev-lifecycle'
 
-const handleElectronOnStart = (options: { reload: () => void }) => {
-  options.reload()
+const electronRestartCoordinator = createElectronRestartCoordinator({
+  stopOwnedChild: () => electronStartup.exit()
+})
+
+const handleElectronMainOnStart = (options: ElectronStartOptions): void => {
+  void electronRestartCoordinator.restart(options)
+}
+
+const closeElectronDevLifecycle = (): void => {
+  void electronRestartCoordinator.close()
 }
 
 const exportWorkerElectronShimPlugin = () => {
@@ -101,10 +110,18 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'weflow-electron-dev-lifecycle',
+      configureServer(server) {
+        server.httpServer?.once('close', () => {
+          closeElectronDevLifecycle()
+        })
+      }
+    },
     electron([
       {
         entry: 'electron/main.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -128,7 +145,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/annualReportWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -147,7 +164,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/dualReportWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -166,7 +183,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/imageSearchWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -181,7 +198,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/imageDecryptWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -196,7 +213,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/wcdbWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -216,7 +233,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/transcribeWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -234,7 +251,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/exportWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           plugins: [exportWorkerElectronShimPlugin()],
           build: {
@@ -256,7 +273,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/apiMessageWorker.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -271,7 +288,7 @@ export default defineConfig({
       },
       {
         entry: 'electron/preload.ts',
-        onstart: handleElectronOnStart,
+        onstart: handleElectronMainOnStart,
         vite: {
           build: {
             outDir: 'dist-electron'

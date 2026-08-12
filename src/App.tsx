@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, type Location } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useNavigationType, type Location } from 'react-router-dom'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
+import { DetailChromeProvider } from './components/common/DetailChromeContext'
 import RouteGuard from './components/RouteGuard'
 import HomePage from './pages/HomePage'
 
@@ -57,6 +58,7 @@ function RouteStateRedirect({ to }: { to: string }) {
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const settingsBackgroundRef = useRef<Location>({
     pathname: '/home',
     search: '',
@@ -95,10 +97,15 @@ function App() {
     ? settingsRouteState?.backgroundLocation ?? settingsBackgroundRef.current
     : location
   const isExportRoute = routeLocation.pathname === '/export'
+  const usesNativeDetailContainer = routeLocation.pathname === '/chat' || routeLocation.pathname === '/backup' || routeLocation.pathname === '/export' || routeLocation.pathname === '/footprint' || routeLocation.pathname === '/annual-report' || routeLocation.pathname.startsWith('/analytics') || routeLocation.pathname === '/contacts' || routeLocation.pathname === '/sns' || routeLocation.pathname === '/resources' || routeLocation.pathname === '/insight-inbox'
+  const currentHistoryIndex = Number.isFinite(Number(window.history.state?.idx))
+    ? Number(window.history.state.idx)
+    : 0
   // Export 模块按需挂载：首次进入导出页，或存在启用的自动化任务（调度器在导出页内）时才挂载
   const [exportMounted, setExportMounted] = useState(false)
   const [themeHydrated, setThemeHydrated] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [maxHistoryIndex, setMaxHistoryIndex] = useState(currentHistoryIndex)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [canMinimizeToTray, setCanMinimizeToTray] = useState(false)
   const [closeRestoreMethod, setCloseRestoreMethod] = useState<'tray' | 'dock'>('tray')
@@ -124,6 +131,15 @@ function App() {
       settingsBackgroundRef.current = location
     }
   }, [location])
+
+  useEffect(() => {
+    setMaxHistoryIndex((previous) => navigationType === 'PUSH'
+      ? currentHistoryIndex
+      : Math.max(previous, currentHistoryIndex))
+  }, [currentHistoryIndex, location.key, navigationType])
+
+  const canGoBack = currentHistoryIndex > 0
+  const canGoForward = navigationType !== 'PUSH' && currentHistoryIndex < maxHistoryIndex
 
   const isStandaloneWindow =
     isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow || isChatHistoryWindow ||
@@ -629,7 +645,6 @@ function App() {
 
   return (
     <div className="app-container">
-      <div className="window-drag-region" aria-hidden="true" />
       {isLocked && (
         <LockScreen
           onUnlock={() => setLocked(false)}
@@ -637,11 +652,6 @@ function App() {
           useHello={lockUseHello}
         />
       )}
-      <TitleBar
-        sidebarCollapsed={sidebarCollapsed}
-        onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
-      />
-
       {/* 全局悬浮进度胶囊 (处理：新版本提示、下载进度、错误提示) */}
       <UpdateProgressCapsule />
 
@@ -759,52 +769,68 @@ function App() {
         onCancel={() => handleWindowCloseAction('cancel')}
       />
 
-      <div className="main-layout">
-        <Sidebar collapsed={sidebarCollapsed} />
-        <main className="content">
-          <RouteGuard>
-            {/* Export 模块按需挂载（首次访问或有自动化任务时），挂载后 keepalive 保持任务/调度状态 */}
-            {exportMounted && (
+      <DetailChromeProvider>
+        <div className="mac-split-view-container main-layout">
+          <Sidebar collapsed={sidebarCollapsed} />
+          <div className="sidebar-detail-separator" aria-hidden="true" />
+          <div className="detail-pane">
+            <TitleBar
+              sidebarCollapsed={sidebarCollapsed}
+              onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
+              showLogo={false}
+              showNavControls
+              showWindowControls
+              onBack={() => navigate(-1)}
+              onForward={() => navigate(1)}
+              canGoBack={canGoBack}
+              canGoForward={canGoForward}
+            />
+            <main className={`content ${usesNativeDetailContainer ? 'native-detail-container' : ''}`}>
+            <RouteGuard>
+              {/* Export 模块按需挂载（首次访问或有自动化任务时），挂载后 keepalive 保持任务/调度状态 */}
+              {exportMounted && (
+                <Suspense fallback={null}>
+                  <div className={`export-keepalive-page ${isExportRoute ? 'active' : 'hidden'}`} aria-hidden={!isExportRoute}>
+                    <ExportPage />
+                  </div>
+                </Suspense>
+              )}
+
               <Suspense fallback={null}>
-                <div className={`export-keepalive-page ${isExportRoute ? 'active' : 'hidden'}`} aria-hidden={!isExportRoute}>
-                  <ExportPage />
-                </div>
+                <Routes location={routeLocation}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/home" element={<HomePage />} />
+                  <Route path="/account-management" element={<AccountManagementPage />} />
+                  <Route path="/chat" element={<ChatPage />} />
+
+                  <Route path="/analytics" element={<ChatAnalyticsHubPage />} />
+                  <Route path="/analytics/private" element={<AnalyticsWelcomePage />} />
+                  <Route path="/analytics/private/view" element={<AnalyticsPage />} />
+                  <Route path="/analytics/group" element={<GroupAnalyticsPage />} />
+                  <Route path="/analytics/view" element={<RouteStateRedirect to="/analytics/private/view" />} />
+                  <Route path="/group-analytics" element={<RouteStateRedirect to="/analytics/group" />} />
+                  <Route path="/annual-report" element={<AnnualReportPage />} />
+                  <Route path="/annual-report/view" element={<AnnualReportWindow />} />
+                  <Route path="/dual-report" element={<DualReportPage />} />
+                  <Route path="/dual-report/view" element={<DualReportWindow />} />
+                  <Route path="/footprint" element={<MyFootprintPage />} />
+
+                  <Route path="/export" element={<div className="export-route-anchor" aria-hidden="true" />} />
+                  <Route path="/sns" element={<SnsPage />} />
+                  <Route path="/insight-inbox" element={<InsightInboxPage />} />
+                  <Route path="/biz" element={<BizPage />} />
+                  <Route path="/contacts" element={<ContactsPage />} />
+                  <Route path="/resources" element={<ResourcesPage />} />
+                  <Route path="/backup" element={<BackupPage />} />
+                  <Route path="/chat-history/:sessionId/:messageId" element={<ChatHistoryPage />} />
+                  <Route path="/chat-history-inline/:payloadId" element={<ChatHistoryPage />} />
+                </Routes>
               </Suspense>
-            )}
-
-            <Suspense fallback={null}>
-              <Routes location={routeLocation}>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/home" element={<HomePage />} />
-                <Route path="/account-management" element={<AccountManagementPage />} />
-                <Route path="/chat" element={<ChatPage />} />
-
-                <Route path="/analytics" element={<ChatAnalyticsHubPage />} />
-                <Route path="/analytics/private" element={<AnalyticsWelcomePage />} />
-                <Route path="/analytics/private/view" element={<AnalyticsPage />} />
-                <Route path="/analytics/group" element={<GroupAnalyticsPage />} />
-                <Route path="/analytics/view" element={<RouteStateRedirect to="/analytics/private/view" />} />
-                <Route path="/group-analytics" element={<RouteStateRedirect to="/analytics/group" />} />
-                <Route path="/annual-report" element={<AnnualReportPage />} />
-                <Route path="/annual-report/view" element={<AnnualReportWindow />} />
-                <Route path="/dual-report" element={<DualReportPage />} />
-                <Route path="/dual-report/view" element={<DualReportWindow />} />
-                <Route path="/footprint" element={<MyFootprintPage />} />
-
-                <Route path="/export" element={<div className="export-route-anchor" aria-hidden="true" />} />
-                <Route path="/sns" element={<SnsPage />} />
-                <Route path="/insight-inbox" element={<InsightInboxPage />} />
-                <Route path="/biz" element={<BizPage />} />
-                <Route path="/contacts" element={<ContactsPage />} />
-                <Route path="/resources" element={<ResourcesPage />} />
-                <Route path="/backup" element={<BackupPage />} />
-                <Route path="/chat-history/:sessionId/:messageId" element={<ChatHistoryPage />} />
-                <Route path="/chat-history-inline/:payloadId" element={<ChatHistoryPage />} />
-              </Routes>
-            </Suspense>
-          </RouteGuard>
-        </main>
-      </div>
+            </RouteGuard>
+            </main>
+          </div>
+        </div>
+      </DetailChromeProvider>
 
       {isSettingsRoute && (
         <SettingsPage onClose={handleCloseSettings} />

@@ -13,6 +13,7 @@
   },
   "//": "二改不应改变此处的作者与应用信息",
   "scripts": {
+    "test": "vitest run",
     "postinstall": "electron-builder install-app-deps && node scripts/prepare-electron-runtime.cjs",
     "rebuild": "electron-rebuild",
     "dev": "node scripts/prepare-electron-runtime.cjs && vite",
@@ -50,18 +51,22 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.1.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
+    "jsdom": "^30.0.1",
     "sass": "^1.101.0",
     "sharp": "^0.35.3",
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vite-plugin-electron": "^1.1.0",
-    "vite-plugin-electron-renderer": "^1.0.0"
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "vitest": "^4.0.18"
   },
   "pnpm": {
     "overrides": {
@@ -101,6 +106,9 @@
       ],
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "仅当你启用 OmniMind 自动托管时，WeFlow 才会通过“系统事件”使用 Apple Events，以辅助完成你确认的自动回复操作。"
+      },
       "icon": "resources/icons/macos/icon.icns",
       "extraResources": [
         {
