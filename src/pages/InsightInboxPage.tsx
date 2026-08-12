@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarDays, Code, Copy, MessageSquare, RefreshCw, Search, Sparkles, X } from 'lucide-react'
 import { Avatar } from '../components/Avatar'
+import { WeFlowCard, WeFlowDialog, WeFlowSearch, WeFlowTabs } from '../components/common'
 import type {
   InsightRecord,
   InsightRecordContactFacet,
@@ -324,7 +325,7 @@ export default function InsightInboxPage() {
             <div className="insight-date-group" key={group.label}>
               <div className="insight-date-label">{group.label}</div>
               {group.records.map((record) => (
-                <article
+                <WeFlowCard
                   id={`insight-record-${record.id}`}
                   key={record.id}
                   className={`insight-card ${record.read ? '' : 'unread'} ${focusedRecordId === record.id ? 'focused' : ''}`}
@@ -373,7 +374,7 @@ export default function InsightInboxPage() {
                       </div>
                     )}
                   </div>
-                </article>
+                </WeFlowCard>
               ))}
             </div>
           ))}
@@ -390,14 +391,12 @@ export default function InsightInboxPage() {
             <Search size={14} />
             <span>关键词搜索</span>
           </div>
-          <div className="insight-input-wrap">
-            <input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="搜索见解或联系人..."
-            />
-            {keyword && <button onClick={() => setKeyword('')}><X size={14} /></button>}
-          </div>
+          <WeFlowSearch
+            value={keyword}
+            onChange={setKeyword}
+            placeholder="搜索见解或联系人..."
+            size="sm"
+          />
         </div>
 
         <div className="insight-filter-widget">
@@ -405,21 +404,16 @@ export default function InsightInboxPage() {
             <Sparkles size={14} />
             <span>来源类型</span>
           </div>
-          <div className="insight-source-tabs">
-            {[
-              { value: 'all', label: '全部' },
-              { value: 'insight', label: 'AI 见解' },
-              { value: 'message_analysis', label: '深度解析' }
-            ].map((option) => (
-              <button
-                key={option.value}
-                className={sourceType === option.value ? 'active' : ''}
-                onClick={() => setSourceType(option.value as SourceFilterMode)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <WeFlowTabs
+            activeKey={sourceType}
+            onChange={(key) => setSourceType(key as SourceFilterMode)}
+            size="sm"
+            items={[
+              { key: 'all', label: '全部' },
+              { key: 'insight', label: 'AI 见解' },
+              { key: 'message_analysis', label: '深度解析' }
+            ]}
+          />
         </div>
 
         <div className="insight-filter-widget">
@@ -427,22 +421,17 @@ export default function InsightInboxPage() {
             <CalendarDays size={14} />
             <span>日期范围</span>
           </div>
-          <div className="insight-date-tabs">
-            {[
-              { value: 'all', label: '全部' },
-              { value: 'today', label: '今天' },
-              { value: 'week', label: '近 7 天' },
-              { value: 'custom', label: '自定义' }
-            ].map((option) => (
-              <button
-                key={option.value}
-                className={dateMode === option.value ? 'active' : ''}
-                onClick={() => setDateMode(option.value as DateFilterMode)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <WeFlowTabs
+            activeKey={dateMode}
+            onChange={(key) => setDateMode(key as DateFilterMode)}
+            size="sm"
+            items={[
+              { key: 'all', label: '全部' },
+              { key: 'today', label: '今天' },
+              { key: 'week', label: '近 7 天' },
+              { key: 'custom', label: '自定义' }
+            ]}
+          />
           {dateMode === 'custom' && (
             <div className="insight-custom-dates">
               <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
@@ -457,14 +446,12 @@ export default function InsightInboxPage() {
             <span>聊天对象</span>
             <span className="insight-widget-count">{contacts.length}</span>
           </div>
-          <div className="insight-input-wrap">
-            <input
-              value={contactSearch}
-              onChange={(event) => setContactSearch(event.target.value)}
-              placeholder="查找联系人..."
-            />
-            {contactSearch && <button onClick={() => setContactSearch('')}><X size={14} /></button>}
-          </div>
+          <WeFlowSearch
+            value={contactSearch}
+            onChange={setContactSearch}
+            placeholder="查找联系人..."
+            size="sm"
+          />
           <button
             className={`insight-contact-row all ${selectedSessionId ? '' : 'active'}`}
             onClick={() => setSelectedSessionId('')}
@@ -489,89 +476,83 @@ export default function InsightInboxPage() {
       </aside>
 
       {logRecord && (
-        <div className="insight-modal-overlay" onClick={() => setLogRecord(null)}>
-          <div className="insight-log-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="insight-log-header">
-              <div>
-                <h3>请求日志</h3>
-                <span>{logRecord.displayName} · {formatRecordTime(logRecord.createdAt)}</span>
-              </div>
-              <div className="insight-log-actions">
-                <button onClick={() => { void copyText(buildLogText(logRecord), '请求日志已复制') }}>
-                  <Copy size={15} />
-                  复制
-                </button>
-                <button className="close" onClick={() => setLogRecord(null)}>
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="insight-log-body">
+        <WeFlowDialog
+          open={Boolean(logRecord)}
+          onClose={() => setLogRecord(null)}
+          title={`请求日志 - ${logRecord.displayName}`}
+          subtitle={formatRecordTime(logRecord.createdAt)}
+          size="lg"
+          footer={
+            <button className="insight-action-btn" onClick={() => { void copyText(buildLogText(logRecord), '请求日志已复制') }}>
+              <Copy size={15} /> 复制
+            </button>
+          }
+        >
+          <div className="insight-log-body">
+            <section>
+              <h4>请求参数</h4>
+              <pre>{[
+                `Endpoint: ${logRecord.log.endpoint}`,
+                `Model: ${logRecord.log.model}`,
+                `Max Tokens: ${logRecord.log.maxTokens}`,
+                `Temperature: ${logRecord.log.temperature}`,
+                `Duration: ${logRecord.log.durationMs}ms`,
+                `Source: ${getSourceLabel(logRecord.sourceType)}`,
+                `Trigger: ${getTriggerLabel(logRecord.triggerReason)}`,
+                ...(logRecord.sourceType === 'message_analysis'
+                  ? [
+                      `JSON Mode: ${logRecord.log.responseFormatJson ? 'enabled' : 'disabled'}`,
+                      `JSON Fallback: ${logRecord.log.responseFormatFallback ? 'yes' : 'no'}`,
+                      `Fallback Reason: ${logRecord.log.responseFormatFallbackReason || 'none'}`
+                    ]
+                  : [])
+              ].join('\n')}</pre>
+            </section>
+            {logRecord.sourceType === 'message_analysis' && (
               <section>
-                <h4>请求参数</h4>
+                <h4>深度解析目标</h4>
                 <pre>{[
-                  `Endpoint: ${logRecord.log.endpoint}`,
-                  `Model: ${logRecord.log.model}`,
-                  `Max Tokens: ${logRecord.log.maxTokens}`,
-                  `Temperature: ${logRecord.log.temperature}`,
-                  `Duration: ${logRecord.log.durationMs}ms`,
-                  `Source: ${getSourceLabel(logRecord.sourceType)}`,
-                  `Trigger: ${getTriggerLabel(logRecord.triggerReason)}`,
-                  ...(logRecord.sourceType === 'message_analysis'
-                    ? [
-                        `JSON Mode: ${logRecord.log.responseFormatJson ? 'enabled' : 'disabled'}`,
-                        `JSON Fallback: ${logRecord.log.responseFormatFallback ? 'yes' : 'no'}`,
-                        `Fallback Reason: ${logRecord.log.responseFormatFallbackReason || 'none'}`
-                      ]
-                    : [])
+                  `Sender: ${logRecord.messageInsight?.targetSenderName || logRecord.log.targetMessage?.senderName || ''}`,
+                  `Preview: ${logRecord.messageInsight?.targetTextPreview || logRecord.log.targetMessage?.textPreview || ''}`,
+                  `LocalId: ${logRecord.messageInsight?.targetLocalId || logRecord.log.targetMessage?.localId || 0}`,
+                  `CreateTime: ${logRecord.messageInsight?.targetCreateTime || logRecord.log.targetMessage?.createTime || 0}`,
+                  `MessageKey: ${logRecord.messageInsight?.targetMessageKey || logRecord.log.targetMessage?.messageKey || ''}`,
+                  `Context Requested: ${logRecord.log.contextStats?.requested ?? logRecord.log.contextCount}`,
+                  `Context Before: ${logRecord.log.contextStats?.beforeTarget ?? 0}`,
+                  `Context After: ${logRecord.log.contextStats?.afterTarget ?? 0}`,
+                  `Context Error: ${logRecord.log.contextStats?.readError || 'none'}`
                 ].join('\n')}</pre>
               </section>
-              {logRecord.sourceType === 'message_analysis' && (
-                <section>
-                  <h4>深度解析目标</h4>
-                  <pre>{[
-                    `Sender: ${logRecord.messageInsight?.targetSenderName || logRecord.log.targetMessage?.senderName || ''}`,
-                    `Preview: ${logRecord.messageInsight?.targetTextPreview || logRecord.log.targetMessage?.textPreview || ''}`,
-                    `LocalId: ${logRecord.messageInsight?.targetLocalId || logRecord.log.targetMessage?.localId || 0}`,
-                    `CreateTime: ${logRecord.messageInsight?.targetCreateTime || logRecord.log.targetMessage?.createTime || 0}`,
-                    `MessageKey: ${logRecord.messageInsight?.targetMessageKey || logRecord.log.targetMessage?.messageKey || ''}`,
-                    `Context Requested: ${logRecord.log.contextStats?.requested ?? logRecord.log.contextCount}`,
-                    `Context Before: ${logRecord.log.contextStats?.beforeTarget ?? 0}`,
-                    `Context After: ${logRecord.log.contextStats?.afterTarget ?? 0}`,
-                    `Context Error: ${logRecord.log.contextStats?.readError || 'none'}`
-                  ].join('\n')}</pre>
-                </section>
-              )}
-              {logRecord.sourceType === 'message_analysis' && logRecord.log.parsedAnalysis && (
-                <section>
-                  <h4>解析字段</h4>
-                  <pre>{[
-                    `explicitText: ${logRecord.log.parsedAnalysis.explicitText}`,
-                    `emotion: ${logRecord.log.parsedAnalysis.emotion}`,
-                    `intent: ${logRecord.log.parsedAnalysis.intent}`,
-                    `topic: ${logRecord.log.parsedAnalysis.topic}`
-                  ].join('\n')}</pre>
-                </section>
-              )}
+            )}
+            {logRecord.sourceType === 'message_analysis' && logRecord.log.parsedAnalysis && (
               <section>
-                <h4>System Prompt</h4>
-                <pre>{logRecord.log.systemPrompt}</pre>
+                <h4>解析字段</h4>
+                <pre>{[
+                  `explicitText: ${logRecord.log.parsedAnalysis.explicitText}`,
+                  `emotion: ${logRecord.log.parsedAnalysis.emotion}`,
+                  `intent: ${logRecord.log.parsedAnalysis.intent}`,
+                  `topic: ${logRecord.log.parsedAnalysis.topic}`
+                ].join('\n')}</pre>
               </section>
-              <section>
-                <h4>User Prompt</h4>
-                <pre>{logRecord.log.userPrompt}</pre>
-              </section>
-              <section>
-                <h4>模型输出</h4>
-                <pre>{logRecord.log.rawOutput}</pre>
-              </section>
-              <section>
-                <h4>最终见解</h4>
-                <pre>{logRecord.log.finalInsight}</pre>
-              </section>
-            </div>
+            )}
+            <section>
+              <h4>System Prompt</h4>
+              <pre>{logRecord.log.systemPrompt}</pre>
+            </section>
+            <section>
+              <h4>User Prompt</h4>
+              <pre>{logRecord.log.userPrompt}</pre>
+            </section>
+            <section>
+              <h4>模型输出</h4>
+              <pre>{logRecord.log.rawOutput}</pre>
+            </section>
+            <section>
+              <h4>最终见解</h4>
+              <pre>{logRecord.log.finalInsight}</pre>
+            </section>
           </div>
-        </div>
+        </WeFlowDialog>
       )}
 
       {message && <div className="insight-copy-toast">{message}</div>}
