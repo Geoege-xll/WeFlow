@@ -1649,22 +1649,18 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     setImageKeyProgress(0);
 
     try {
-      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath;
-      const result = await window.electronAPI.key.autoGetImageKey(accountPath, wxid)
+      const result = await window.electronAPI.key.autoGetImageKey()
       if (result.success && result.aesKey) {
         if (typeof result.xorKey === 'number') setImageXorKey(`0x${result.xorKey.toString(16).toUpperCase().padStart(2, '0')}`)
         setImageAesKey(result.aesKey)
         setImageKeyStatus('已获取图片密钥')
         showMessage('已自动获取图片密钥', true)
-        const newXorKey = typeof result.xorKey === 'number' ? result.xorKey : 0
-        const newAesKey = result.aesKey
-        await configService.setImageXorKey(newXorKey)
-        await configService.setImageAesKey(newAesKey)
-        if (wxid) await configService.setWxidConfig(wxid, { decryptKey, imageXorKey: newXorKey, imageAesKey: newAesKey })
       } else {
+        setImageKeyStatus(result.error || '自动获取图片密钥失败')
         showMessage(result.error || '自动获取图片密钥失败', false)
       }
     } catch (e: any) {
+      setImageKeyStatus(`自动获取图片密钥失败: ${e}`)
       showMessage(`自动获取图片密钥失败: ${e}`, false)
     } finally {
       setIsFetchingImageKey(false)
@@ -1679,22 +1675,18 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     setImageKeyStatus('正在扫描内存...');
 
     try {
-      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath;
-      const result = await window.electronAPI.key.scanImageKeyFromMemory(accountPath)
+      const result = await window.electronAPI.key.scanImageKeyFromMemory()
       if (result.success && result.aesKey) {
         if (typeof result.xorKey === 'number') setImageXorKey(`0x${result.xorKey.toString(16).toUpperCase().padStart(2, '0')}`)
         setImageAesKey(result.aesKey)
         setImageKeyStatus('内存扫描成功，已获取图片密钥')
         showMessage('内存扫描成功，已获取图片密钥', true)
-        const newXorKey = typeof result.xorKey === 'number' ? result.xorKey : 0
-        const newAesKey = result.aesKey
-        await configService.setImageXorKey(newXorKey)
-        await configService.setImageAesKey(newAesKey)
-        if (wxid) await configService.setWxidConfig(wxid, { decryptKey, imageXorKey: newXorKey, imageAesKey: newAesKey })
       } else {
+        setImageKeyStatus(result.error || '内存扫描获取图片密钥失败')
         showMessage(result.error || '内存扫描获取图片密钥失败', false)
       }
     } catch (e: any) {
+      setImageKeyStatus(`内存扫描失败: ${e}`)
       showMessage(`内存扫描失败: ${e}`, false)
     } finally {
       setIsFetchingImageKey(false)
@@ -5905,6 +5897,4 @@ JSON 输出格式：
 }
 
 export default SettingsPage
-
-
 

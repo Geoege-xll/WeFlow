@@ -37,8 +37,11 @@ import { OmniMindManualMessageComposer } from '../features/omnimind/OmniMindManu
 import { omniMindZhCN } from '../features/omnimind/locale'
 import { getOmniMindChatMountPolicy } from '../features/omnimind/chatMountPolicy'
 import { OmniMindQueuePanel } from '../features/omnimind/OmniMindQueuePanel'
+import { useOmniMind } from '../features/omnimind/useOmniMind'
+import { OmniMindHostingActiveModal } from '../features/omnimind/OmniMindHostingActiveModal'
 import { useOmniMindComposerAccountReadiness } from '../features/omnimind/useOmniMindComposerAccountReadiness'
 import { computeChatResponsiveLayout } from './Chat/chatResponsiveLayout'
+import { resolveChatImageFailure } from './Chat/chatImageFailureViewModel'
 import { buildNewMessagesCursor } from './Chat/messageCursor'
 import {
   subscribeSharedImageCacheResolved,
@@ -1439,13 +1442,23 @@ const SessionItem = React.memo(function SessionItem({
 
   const isFoldEntry = session.username.toLowerCase().includes('placeholder_foldgroup')
   const isBizEntry = session.username === OFFICIAL_ACCOUNTS_VIRTUAL_ID
+  const handleKeyboardSelect = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onSelect(session)
+    }
+  }
 
   // 折叠入口：专属名称和图标
   if (isFoldEntry) {
     return (
       <div
         className={`session-item fold-entry ${isActive ? 'active' : ''}`}
+        role="option"
+        aria-selected={isActive}
+        tabIndex={0}
         onClick={() => onSelect(session)}
+        onKeyDown={handleKeyboardSelect}
       >
         <div className="fold-entry-avatar">
           <MessageSquare size={22} />
@@ -1468,7 +1481,11 @@ const SessionItem = React.memo(function SessionItem({
     return (
       <div
         className={`session-item biz-entry ${isActive ? 'active' : ''}`}
+        role="option"
+        aria-selected={isActive}
+        tabIndex={0}
         onClick={() => onSelect(session)}
+        onKeyDown={handleKeyboardSelect}
       >
         <div className="biz-entry-avatar">
           <Newspaper size={22} />
@@ -1507,12 +1524,16 @@ const SessionItem = React.memo(function SessionItem({
   return (
     <div
       className={`session-item ${isActive ? 'active' : ''} ${session.isMuted ? 'muted' : ''}`}
+      role="option"
+      aria-selected={isActive}
+      tabIndex={0}
       onClick={() => onSelect(session)}
+      onKeyDown={handleKeyboardSelect}
     >
       <Avatar
         src={session.avatarUrl}
         name={sessionDisplayName}
-        size={48}
+        size={44}
         className={session.username.includes('@chatroom') ? 'group' : ''}
       />
       <div className="session-info">
@@ -1690,10 +1711,22 @@ function ChatPage(props: ChatPageProps) {
     failConnect: failComposerAccountConnect
   } = useOmniMindComposerAccountReadiness()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(260)
   const [chatContainerWidth, setChatContainerWidth] = useState(0)
-  const [isResizing, setIsResizing] = useState(false)
   const [isMarkingAllSessionsRead, setIsMarkingAllSessionsRead] = useState(false)
+  const omniMindApi = useOmniMind()
+  const isHostingActive = omniMindApi.snapshot.runtimeState === 'running' || omniMindApi.snapshot.runtimeState === 'degraded' || omniMindApi.snapshot.runtimeState === 'starting' || omniMindApi.snapshot.runtimeState === 'validating'
+  const [showQueueDrawer, setShowQueueDrawer] = useState(false)
+  const [showHostingActiveModal, setShowHostingActiveModal] = useState(false)
+  const handleOpenHostingModal = useCallback(async () => {
+    if (!isHostingActive) {
+      try {
+        await omniMindApi.enable()
+      } catch (e) {
+        console.warn('[OmniMind] Enable failed:', e)
+      }
+    }
+    setShowHostingActiveModal(true)
+  }, [isHostingActive, omniMindApi])
   const [showDetailPanel, setShowDetailPanel] = useState(false)
   const [showGroupMembersPanel, setShowGroupMembersPanel] = useState(false)
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null)
@@ -2216,6 +2249,7 @@ function ChatPage(props: ChatPageProps) {
       return
     }
     setJumpPopoverDate(resolveCurrentViewDate())
+    setShowInSessionSearch(false)
     updateJumpPopoverPosition()
     setShowJumpPopover(true)
     requestAnimationFrame(() => updateJumpPopoverPosition())
@@ -3301,6 +3335,7 @@ function ChatPage(props: ChatPageProps) {
     inspectorTriggerRef.current = trigger ?? null
     setShowGroupMembersPanel(false)
     setShowGroupSummaryPanel(false)
+    setShowQueueDrawer(false)
     setShowDetailPanel(true)
     if (currentSessionId) {
       void loadSessionDetail(currentSessionId)
@@ -4966,6 +5001,7 @@ function ChatPage(props: ChatPageProps) {
   }, [currentSessionId, enrichMessagesWithSenderProfiles, hydrateInSessionSearchResults])
 
   const handleToggleInSessionSearch = useCallback(() => {
+    setShowJumpPopover(false)
     setShowInSessionSearch(v => {
       if (v) {
         cancelInSessionSearchTasks()
@@ -5698,30 +5734,6 @@ function ChatPage(props: ChatPageProps) {
       })
     }
   }, [messages.length, suppressScrollToBottomButton])
-
-  // 拖动调节侧边栏宽度
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setIsResizing(true)
-
-    const startX = e.clientX
-    const startWidth = sidebarWidth
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const delta = e.clientX - startX
-      const newWidth = Math.min(Math.max(startWidth + delta, 200), 400)
-      setSidebarWidth(newWidth)
-    }
-
-    const handleMouseUp = () => {
-      setIsResizing(false)
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }, [sidebarWidth])
 
   useEffect(() => {
     if (standaloneSessionWindow) return
@@ -7858,7 +7870,10 @@ function ChatPage(props: ChatPageProps) {
     aiMessageInsightContextCount
   ])
 
-  const responsiveLayout = computeChatResponsiveLayout(chatContainerWidth, sidebarWidth)
+  const desktopHeaderActionCount = 6 + (isCurrentSessionGroup
+    ? 2 + Number(aiGroupSummaryEnabled)
+    : Number(isCurrentSessionPrivateSnsSupported))
+  const responsiveLayout = computeChatResponsiveLayout(chatContainerWidth, undefined, desktopHeaderActionCount)
   const compactHeader = !standaloneSessionWindow && responsiveLayout.compactHeader
   const chatPageStyle = standaloneSessionWindow
     ? undefined
@@ -7870,7 +7885,7 @@ function ChatPage(props: ChatPageProps) {
   return (
     <div
       ref={chatPageRef}
-      className={`chat-page ${isResizing ? 'resizing' : ''} ${compactHeader ? 'compact-chat-header' : ''} ${standaloneSessionWindow ? 'standalone session-only' : ''}`}
+      className={`chat-page ${compactHeader ? 'compact-chat-header' : ''} ${standaloneSessionWindow ? 'standalone session-only' : ''}`}
       style={chatPageStyle}
     >
       {!standaloneSessionWindow && <nav className="omnimind-skip-links" aria-label="OmniMind"><a href="#chat-session-list">{omniMindZhCN.skip.sessions}</a><a href="#chat-message-area">{omniMindZhCN.skip.messages}</a><a href="#omnimind-ai-queue">{omniMindZhCN.skip.queue}</a></nav>}
@@ -7976,7 +7991,14 @@ function ChatPage(props: ChatPageProps) {
                   </button>
                 )}
               </div>
-              <button className="icon-btn refresh-btn" onClick={handleRefresh} disabled={isLoadingSessions || isRefreshingSessions}>
+              <button
+                className="icon-btn refresh-btn"
+                onClick={handleRefresh}
+                disabled={isLoadingSessions || isRefreshingSessions}
+                aria-label="刷新会话"
+                title="刷新会话"
+                aria-busy={isLoadingSessions || isRefreshingSessions}
+              >
                 <RefreshCw size={16} className={(isLoadingSessions || isRefreshingSessions) ? 'spin' : ''} />
               </button>
               <button
@@ -7985,6 +8007,7 @@ function ChatPage(props: ChatPageProps) {
                 disabled={isMarkingAllSessionsRead || isLoadingSessions || isRefreshingSessions}
                 title="一键已读"
                 aria-label="一键已读"
+                aria-busy={isMarkingAllSessionsRead}
               >
                 {isMarkingAllSessionsRead ? <Loader2 size={16} className="spin" /> : <CheckSquare size={16} />}
               </button>
@@ -8041,7 +8064,7 @@ function ChatPage(props: ChatPageProps) {
                     <span className="search-phase-hint done">已完成</span>
                   )}
                 </div>
-                <div className="search-results-list">
+                <div className="search-results-list" role="listbox" aria-label="聊天记录搜索结果">
                   {groupedGlobalMsgResults.map(([sessionId, messages]) => {
                     const session = sessionLookupMap.get(sessionId)
                     const firstMsg = messages[0]
@@ -8050,6 +8073,9 @@ function ChatPage(props: ChatPageProps) {
                       <div
                         key={sessionId}
                         className="session-item"
+                        role="option"
+                        aria-selected={false}
+                        tabIndex={0}
                         onClick={() => {
                           if (session) {
                             pendingInSessionSearchRef.current = {
@@ -8061,11 +8087,23 @@ function ChatPage(props: ChatPageProps) {
                             handleSelectSession(session)
                           }
                         }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          event.preventDefault()
+                          if (!session) return
+                          pendingInSessionSearchRef.current = {
+                            sessionId,
+                            keyword: globalMsgQuery,
+                            firstMsgTime: firstMsg.createTime || 0,
+                            results: messages
+                          }
+                          handleSelectSession(session)
+                        }}
                       >
                         <Avatar
                           src={session?.avatarUrl}
                           name={displayNameOrFallback(sessionId, session?.displayName)}
-                          size={48}
+                          size={44}
                         />
                         <div className="session-content">
                           <div className="session-top">
@@ -8121,6 +8159,8 @@ function ChatPage(props: ChatPageProps) {
                   )}
                   <div
                     className="session-list"
+                    role="listbox"
+                    aria-label="会话"
                     ref={sessionListRef}
                     onScroll={() => {
                       isScrollingRef.current = true
@@ -8158,7 +8198,7 @@ function ChatPage(props: ChatPageProps) {
             <div className="session-list-panel folded-panel">
               {foldedView && (
                   foldedSessions.length > 0 ? (
-                      <div className="session-list">
+                      <div className="session-list" role="listbox" aria-label="折叠的群聊">
                         {foldedSessions.map(session => (
                             <SessionItem
                                 key={session.username}
@@ -8193,8 +8233,6 @@ function ChatPage(props: ChatPageProps) {
       </nav>
       )}
 
-      {!standaloneSessionWindow && <div className="resize-handle" onMouseDown={handleResizeStart} />}
-
       {/* 右侧消息区域 */}
       <main id="chat-message-area" tabIndex={-1} aria-label="消息区域" className={`message-area ${compactHeader && (showDetailPanel || showGroupMembersPanel || showGroupSummaryPanel) ? 'compact-inspector' : ''}`}>
         {bizView ? (
@@ -8210,6 +8248,8 @@ function ChatPage(props: ChatPageProps) {
                 showJumpPopover={showJumpPopover}
                 showInSessionSearch={showInSessionSearch}
                 showDetailPanel={showDetailPanel}
+                showQueueDrawer={showQueueDrawer}
+                isHostingActive={isHostingActive}
                 aiGroupSummaryEnabled={aiGroupSummaryEnabled}
                 shouldHideStandaloneDetailButton={shouldHideStandaloneDetailButton}
                 isPrivateSnsSupported={isCurrentSessionPrivateSnsSupported}
@@ -8239,9 +8279,12 @@ function ChatPage(props: ChatPageProps) {
                 onToggleInSessionSearch={handleToggleInSessionSearch}
                 onRefreshMessages={handleRefreshMessages}
                 onToggleDetailPanel={toggleDetailPanel}
+                onToggleQueueDrawer={() => setShowQueueDrawer((prev) => { if (!prev) setShowDetailPanel(false); return !prev })}
+                onOpenHostingModal={handleOpenHostingModal}
               />
               {showJumpPopover && createPortal(
                 <div
+                  id="chat-jump-calendar-popover"
                   ref={jumpPopoverPortalRef}
                   style={{
                     position: 'fixed',
@@ -8300,7 +8343,7 @@ function ChatPage(props: ChatPageProps) {
 
             {/* 会话内搜索浮窗 */}
             {showInSessionSearch && (
-              <div className="in-session-search-popup">
+              <div id="chat-in-session-search-panel" className="in-session-search-popup">
                 <div className="in-session-search-header">
                   <Search size={16} className="search-icon" />
                   <input
@@ -8968,8 +9011,25 @@ function ChatPage(props: ChatPageProps) {
         />}
       </main>
 
-      {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue && <div className="omnimind-queue-separator" aria-hidden="true" />}
-      {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue && <OmniMindQueuePanel currentSessionId={currentSession?.username} onNavigate={navigate} />}
+      {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue && <OmniMindQueuePanel
+        currentSessionId={currentSession?.username}
+        onNavigate={navigate}
+        onClose={() => setShowQueueDrawer(false)}
+        onOpenActiveModal={() => setShowHostingActiveModal(true)}
+        isOverlay={true}
+        hidden={!showQueueDrawer}
+      />}
+
+      {showHostingActiveModal && (
+        <OmniMindHostingActiveModal
+          snapshot={omniMindApi.snapshot}
+          loading={omniMindApi.loading}
+          onStop={async () => {
+            await omniMindApi.disable()
+            setShowHostingActiveModal(false)
+          }}
+        />
+      )}
 
       {/* 语音转文字模型下载弹窗 */}
       {showVoiceTranscribeDialog && (
@@ -10154,6 +10214,7 @@ function MessageBubble({
   const imageObservedHeightRef = useRef<number | null>(null)
   const emojiObservedHeightRef = useRef<number | null>(null)
   const imageAutoDecryptTriggered = useRef(false)
+  const imageKeysRetryGenerationRef = useRef(0)
   const imageAutoHdTriggered = useRef<string | null>(null)
   const [imageInView, setImageInView] = useState(false)
   const imageForceHdAttempted = useRef<string | null>(null)
@@ -10520,6 +10581,7 @@ function MessageBubble({
       setImageLoading(true)
       setImageError(false)
     }
+    let primaryFailure: Pick<SharedImageDecryptResult, 'error' | 'failureKind'> | undefined
     try {
       if (message.imageMd5 || message.imageDatName) {
         const sharedDecryptKey = `${session.username}:${imageCacheKey}:${forceUpdate ? 'force' : 'normal'}`
@@ -10538,9 +10600,10 @@ function MessageBubble({
           const renderPath = toRenderableImageSrc(result.localPath)
           if (!renderPath) {
             if (!silent) {
+              const failure = resolveChatImageFailure({ primary: { error: '路径无效', failureKind: 'decrypt_failed' } })
               setImageError(true)
-              setImageErrorReason('路径无效')
-              setImageFailureKind('decrypt_failed')
+              setImageErrorReason(failure.reason)
+              setImageFailureKind(failure.failureKind)
             }
             return { success: false }
           }
@@ -10553,10 +10616,8 @@ function MessageBubble({
           setImageHasUpdate(false)
           if (result.liveVideoPath) setImageLiveVideoPath(result.liveVideoPath)
           return { ...result, localPath: renderPath }
-        } else if (!silent && result.error) {
-          setImageError(true)
-          setImageErrorReason(result.error)
-          setImageFailureKind(result.failureKind)
+        } else {
+          primaryFailure = { error: result.error, failureKind: result.failureKind }
         }
       }
 
@@ -10574,15 +10635,20 @@ function MessageBubble({
         return { success: true, localPath: dataUrl }
       }
       if (!silent) {
+        const failure = resolveChatImageFailure({ primary: primaryFailure, fallbackError: fallback.error })
         setImageError(true)
-        setImageErrorReason('图片数据获取失败')
-        setImageFailureKind('not_found')
+        setImageErrorReason(failure.reason)
+        setImageFailureKind(failure.failureKind)
       }
     } catch (e) {
       if (!silent) {
+        const failure = resolveChatImageFailure({
+          primary: primaryFailure,
+          caughtError: e instanceof Error ? e.message : e
+        })
         setImageError(true)
-        setImageErrorReason(e instanceof Error ? e.message : '解密异常')
-        setImageFailureKind('decrypt_failed')
+        setImageErrorReason(failure.reason)
+        setImageFailureKind(failure.failureKind)
       }
     } finally {
       if (!silent) setImageLoading(false)
@@ -10610,14 +10676,23 @@ function MessageBubble({
     imageClickTimerRef.current = window.setTimeout(() => {
       setImageClicked(false)
     }, 800)
-    console.info('[UI] image decrypt click (force HD)', {
-      sessionId: session.username,
-      imageMd5: message.imageMd5,
-      imageDatName: message.imageDatName,
-      localId: message.localId
-    })
     void requestImageDecrypt(true)
-  }, [message.imageDatName, message.imageMd5, message.localId, requestImageDecrypt, session.username])
+  }, [requestImageDecrypt])
+
+  useEffect(() => {
+    if (!isImage || !imageError || !imageInView) return
+    const unsubscribe = window.electronAPI.key.onImageKeysChanged((payload) => {
+      if (payload?.reason !== 'updated' || imageKeysRetryGenerationRef.current >= 1) return
+      imageKeysRetryGenerationRef.current += 1
+      imageAutoDecryptTriggered.current = false
+      imageDataUrlCache.delete(imageCacheKey)
+      setImageError(false)
+      setImageErrorReason(undefined)
+      setImageFailureKind(undefined)
+      void requestImageDecrypt(true)
+    })
+    return () => unsubscribe?.()
+  }, [imageCacheKey, imageError, imageInView, isImage, requestImageDecrypt])
 
   const handleOpenImageViewer = useCallback(async () => {
     if (!imageLocalPath) return
@@ -11575,9 +11650,12 @@ function MessageBubble({
                     releaseImageStageLock()
                   }}
                   onError={() => {
+                    const failure = resolveChatImageFailure({ rendererLoadError: true })
                     imageResizeBaselineRef.current = null
                     setImageLoaded(false)
                     setImageError(true)
+                    setImageErrorReason(failure.reason)
+                    setImageFailureKind(failure.failureKind)
                     releaseImageStageLock()
                   }}
                 />

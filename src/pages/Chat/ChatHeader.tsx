@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   Info,
   Loader2,
+  ListTodo,
   Mic,
   MoreHorizontal,
   Newspaper,
@@ -30,6 +31,8 @@ export interface ChatHeaderProps {
   showJumpPopover: boolean
   showInSessionSearch: boolean
   showDetailPanel: boolean
+  showQueueDrawer?: boolean
+  isHostingActive?: boolean
   aiGroupSummaryEnabled: boolean
   shouldHideStandaloneDetailButton: boolean
   isPrivateSnsSupported: boolean
@@ -59,6 +62,8 @@ export interface ChatHeaderProps {
   onToggleInSessionSearch: () => void
   onRefreshMessages: () => void
   onToggleDetailPanel: (trigger?: HTMLButtonElement) => void
+  onToggleQueueDrawer?: () => void
+  onOpenHostingModal?: () => void
 }
 
 function ChatHeader({
@@ -70,6 +75,8 @@ function ChatHeader({
   showJumpPopover,
   showInSessionSearch,
   showDetailPanel,
+  showQueueDrawer,
+  isHostingActive,
   aiGroupSummaryEnabled,
   shouldHideStandaloneDetailButton,
   isPrivateSnsSupported,
@@ -98,7 +105,9 @@ function ChatHeader({
   onToggleJumpPopover,
   onToggleInSessionSearch,
   onRefreshMessages,
-  onToggleDetailPanel
+  onToggleDetailPanel,
+  onToggleQueueDrawer,
+  onOpenHostingModal
 }: ChatHeaderProps) {
   const sessionName = displayNameOrFallback(session.username, session.displayName)
   const exportTitle = isCurrentSessionExporting
@@ -131,6 +140,8 @@ function ChatHeader({
             onClick={onToggleJumpPopover}
             title="跳转到指定时间"
             aria-label="跳转到指定时间"
+            aria-expanded={showJumpPopover}
+            aria-controls="chat-jump-calendar-popover"
           >
             <Calendar size={18} />
           </button>
@@ -141,6 +152,8 @@ function ChatHeader({
           disabled={!currentSessionId}
           title="搜索会话消息"
           aria-label="搜索会话消息"
+          aria-expanded={showInSessionSearch}
+          aria-controls="chat-in-session-search-panel"
         >
           <Search size={18} />
         </button>
@@ -160,9 +173,24 @@ function ChatHeader({
     if (!moreOpen) return
     moreMenuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeMore()
+        return
+      }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+      const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
+      if (!items.length) return
       event.preventDefault()
-      closeMore()
+      const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
+      const nextIndex = event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : event.key === 'ArrowDown'
+            ? (currentIndex + 1) % items.length
+            : (currentIndex - 1 + items.length) % items.length
+      items[nextIndex].focus()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -181,6 +209,24 @@ function ChatHeader({
         {isGroupChat && <div className="header-subtitle">群聊</div>}
       </div>
       <div className="header-actions">
+        {!standaloneSessionWindow && onOpenHostingModal && (
+          <button
+            type="button"
+            className={`primary-hosting-btn ${isHostingActive ? 'active' : ''}`}
+            onClick={onOpenHostingModal}
+            title={isHostingActive ? '自动托管运行中' : '开启托管'}
+          >
+            {isHostingActive ? (
+              <>
+                <span className="pulse-indicator" />
+                托管中
+              </>
+            ) : (
+              '开启托管'
+            )}
+          </button>
+        )}
+        {!compactHeader && <>
         <div className="header-action-group ai-actions">
           <button
             className={`icon-btn session-insight-btn${isTriggeringSessionInsight ? ' triggering' : ''}`}
@@ -288,6 +334,17 @@ function ChatHeader({
           >
             <RefreshCw size={18} className={isRefreshingMessages ? 'spin' : ''} />
           </button>
+          {!standaloneSessionWindow && onToggleQueueDrawer && (
+            <button
+              className={`icon-btn queue-drawer-btn ${showQueueDrawer ? 'active' : ''}`}
+              onClick={onToggleQueueDrawer}
+              title="任务队列"
+              aria-label="任务队列"
+              aria-expanded={showQueueDrawer}
+            >
+              <ListTodo size={18} />
+            </button>
+          )}
           {!shouldHideStandaloneDetailButton && (
             <button
               className={`icon-btn detail-btn ${showDetailPanel ? 'active' : ''}`}
@@ -298,34 +355,37 @@ function ChatHeader({
               <Info size={18} />
             </button>
           )}
-          {compactHeader && (
-            <div className="chat-header-more-wrap">
-              <button
-                ref={moreButtonRef}
-                type="button"
-                className="icon-btn chat-header-more-btn"
-                aria-label="更多会话操作"
-                aria-expanded={moreOpen}
-                aria-controls="chat-header-more-menu"
-                onClick={() => setMoreOpen((open) => !open)}
-              >
-                <MoreHorizontal size={18} />
-              </button>
-              {moreOpen && (
-                <div ref={moreMenuRef} id="chat-header-more-menu" className="chat-header-more-menu" role="menu">
-                  {isGroupChat && aiGroupSummaryEnabled && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(() => onToggleGroupSummaryPanel(moreButtonRef.current ?? undefined))}><Newspaper size={16} />AI 群聊总结</button>}
-                  {!standaloneSessionWindow && isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(onGroupAnalytics)}><BarChart3 size={16} />群聊分析</button>}
-                  {isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(() => onToggleGroupMembersPanel(moreButtonRef.current ?? undefined))}><Users size={16} />群成员</button>}
-                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId || isExportActionBusy} onClick={() => runMoreAction(onExportCurrentSession)}><Download size={16} />{exportTitle}</button>}
-                  {!standaloneSessionWindow && isPrivateSnsSupported && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onOpenSnsTimeline)}><Aperture size={16} />查看朋友圈</button>}
-                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchTranscribe)}><Mic size={16} />{batchVoiceTitle}</button>}
-                  {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchDecrypt)}><ImageIcon size={16} />{batchImageDecryptTitle}</button>}
-                  <button type="button" role="menuitem" disabled={isRefreshingMessages || isLoadingMessages} onClick={() => runMoreAction(onRefreshMessages)}><RefreshCw size={16} />刷新消息</button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+        </>}
+        {compactHeader && (
+          <div className="chat-header-more-wrap">
+            <button
+              ref={moreButtonRef}
+              type="button"
+              className="icon-btn chat-header-more-btn"
+              aria-label="更多会话操作"
+              aria-expanded={moreOpen}
+              aria-controls="chat-header-more-menu"
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {moreOpen && (
+              <div ref={moreMenuRef} id="chat-header-more-menu" className="chat-header-more-menu" role="menu">
+                <button type="button" role="menuitem" disabled={!currentSessionId || isTriggeringSessionInsight} onClick={() => runMoreAction(onTriggerSessionInsight)}><Sparkles size={16} />立即触发当前聊天 AI 见解</button>
+                {isGroupChat && aiGroupSummaryEnabled && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(() => onToggleGroupSummaryPanel(moreButtonRef.current ?? undefined))}><Newspaper size={16} />AI 群聊总结</button>}
+                {!standaloneSessionWindow && isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(onGroupAnalytics)}><BarChart3 size={16} />群聊分析</button>}
+                {isGroupChat && <button type="button" role="menuitem" onClick={() => runMoreAction(() => onToggleGroupMembersPanel(moreButtonRef.current ?? undefined))}><Users size={16} />群成员</button>}
+                {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId || isExportActionBusy} onClick={() => runMoreAction(onExportCurrentSession)}><Download size={16} />{exportTitle}</button>}
+                {!standaloneSessionWindow && isPrivateSnsSupported && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onOpenSnsTimeline)}><Aperture size={16} />查看朋友圈</button>}
+                {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchTranscribe)}><Mic size={16} />{batchVoiceTitle}</button>}
+                {!standaloneSessionWindow && <button type="button" role="menuitem" disabled={!currentSessionId} onClick={() => runMoreAction(onBatchDecrypt)}><ImageIcon size={16} />{batchImageDecryptTitle}</button>}
+                <button type="button" role="menuitem" disabled={isRefreshingMessages || isLoadingMessages} onClick={() => runMoreAction(onRefreshMessages)}><RefreshCw size={16} />刷新消息</button>
+                {!shouldHideStandaloneDetailButton && <button type="button" role="menuitem" onClick={() => runMoreAction(() => onToggleDetailPanel(moreButtonRef.current ?? undefined))}><Info size={16} />会话详情</button>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -343,6 +403,8 @@ function areEqual(prev: ChatHeaderProps, next: ChatHeaderProps) {
     prev.showJumpPopover === next.showJumpPopover &&
     prev.showInSessionSearch === next.showInSessionSearch &&
     prev.showDetailPanel === next.showDetailPanel &&
+    prev.showQueueDrawer === next.showQueueDrawer &&
+    prev.isHostingActive === next.isHostingActive &&
     prev.aiGroupSummaryEnabled === next.aiGroupSummaryEnabled &&
     prev.shouldHideStandaloneDetailButton === next.shouldHideStandaloneDetailButton &&
     prev.isPrivateSnsSupported === next.isPrivateSnsSupported &&
@@ -373,7 +435,9 @@ function areEqual(prev: ChatHeaderProps, next: ChatHeaderProps) {
     prev.onToggleJumpPopover === next.onToggleJumpPopover &&
     prev.onToggleInSessionSearch === next.onToggleInSessionSearch &&
     prev.onRefreshMessages === next.onRefreshMessages &&
-    prev.onToggleDetailPanel === next.onToggleDetailPanel
+    prev.onToggleDetailPanel === next.onToggleDetailPanel &&
+    prev.onToggleQueueDrawer === next.onToggleQueueDrawer &&
+    prev.onOpenHostingModal === next.onOpenHostingModal
   )
 }
 

@@ -7,7 +7,10 @@ import { homedir, tmpdir } from 'os'
 import crypto from 'crypto'
 import { ConfigService } from './config'
 import { wcdbService } from './wcdbService'
-import { decryptDatViaNativeAsync, nativeAddonLocation } from './nativeImageDecrypt'
+import {
+  decryptDatViaNativeAsync,
+  nativeAddonLocation
+} from './nativeImageDecrypt'
 
 // 获取 ffmpeg-static 的路径
 function getStaticFfmpegPath(): string | null {
@@ -84,6 +87,7 @@ type PendingImageTask<T extends DecryptResult> = {
 
 export class ImageDecryptService {
   private configService = new ConfigService()
+  private readonly defaultV1AesKey = 'cfcd208495d565ef'
   private resolvedCache = new Map<string, string>()
   private pending = new Map<string, PendingImageTask<DecryptResult>>()
   private resolvePending = new Map<string, PendingImageTask<DecryptResult & { hasUpdate?: boolean }>>()
@@ -124,7 +128,19 @@ export class ImageDecryptService {
   }
 
   setRuntimeConfig(config: { dbPath?: string; myWxid?: string; imageXorKey?: unknown; imageAesKey?: string } | null): void {
+    const previousIdentity = `${this.runtimeConfig?.myWxid || ''}:${this.runtimeConfig?.imageXorKey || ''}:${this.runtimeConfig?.imageAesKey || ''}`
+    const nextIdentity = `${config?.myWxid || ''}:${config?.imageXorKey || ''}:${config?.imageAesKey || ''}`
     this.runtimeConfig = config
+    if (previousIdentity !== nextIdentity) this.invalidateRuntimeCaches()
+  }
+
+  invalidateRuntimeCaches(): void {
+    this.resolvedCache.clear()
+    this.pending.clear()
+    this.resolvePending.clear()
+    this.updateFlags.clear()
+    this.datNameScanMissAt.clear()
+    this.accountDirCache.clear()
   }
 
   private getConfiguredDbPath(): string {
@@ -593,7 +609,8 @@ export class ImageDecryptService {
 
       this.logInfo('开始解密DAT文件', { datPath, xorKey, hasAesKey: Boolean(aesKeyForNative) })
       this.emitDecryptProgress(payload, cacheKey, 'decrypting', 58, 'running')
-      const nativeResult = await this.tryDecryptDatWithNative(datPath, xorKey, aesKeyForNative)
+      const decryptAttempt = await this.tryDecryptDatWithNative(datPath, xorKey, aesKeyForNative)
+      const nativeResult = decryptAttempt
       if (!nativeResult) {
         this.emitDecryptProgress(payload, cacheKey, 'failed', 100, 'error', 'Rust原生解密不可用')
         return { success: false, error: 'Rust原生解密不可用或解密失败，请检查 native 模块与密钥配置', failureKind: 'not_found' }
@@ -1965,7 +1982,9 @@ export class ImageDecryptService {
         })
       }
     }
-    if (result) return result
+    if (result) {
+      return result
+    }
     const fallback = await this.tryDecryptDatWithJs(datPath, xorKey, aesKey)
     if (fallback) {
       this.logInfo('JS DAT 解密 fallback 已启用', { datPath, ext: fallback.ext })
@@ -1986,12 +2005,24 @@ export class ImageDecryptService {
       const candidates: Buffer[] = []
       const aesKeyText = String(aesKey || '').trim()
       const datVersion = this.getDatVersion(encrypted)
-      if (datVersion === 2 && aesKeyText.length >= 16) {
+      if (datVersion === 1) {
         try {
-          candidates.push(this.decryptDatV4WithJs(encrypted, xorKey, Buffer.from(aesKeyText, 'ascii').subarray(0, 16)))
+          candidates.push(this.decryptDatV4WithJs(
+            encrypted,
+            xorKey,
+            Buffer.from(this.defaultV1AesKey, 'ascii')
+          ))
         } catch { }
-      }
-      if (datVersion !== 2) {
+      } else if (datVersion === 2 && aesKeyText.length >= 16) {
+        const v2Keys = /^[0-9a-f]{32}$/i.test(aesKeyText)
+          ? [Buffer.from(aesKeyText, 'hex'), Buffer.from(aesKeyText, 'ascii').subarray(0, 16)]
+          : [Buffer.from(aesKeyText, 'ascii').subarray(0, 16)]
+        for (const v2Key of v2Keys) {
+          try {
+            candidates.push(this.decryptDatV4WithJs(encrypted, xorKey, v2Key))
+          } catch { }
+        }
+      } else if (datVersion === 0) {
         candidates.push(this.decryptDatV3WithJs(encrypted, xorKey))
       }
 

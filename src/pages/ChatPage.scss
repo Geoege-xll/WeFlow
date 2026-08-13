@@ -2,7 +2,9 @@
   position: relative;
   display: flex;
   height: 100%;
-  gap: 16px;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
 
   // 批量删除进度遮罩
   .delete-progress-overlay {
@@ -212,14 +214,16 @@
   // 独立窗口模式 - EchoTrace 特色风格（使用主题变量）
   &.standalone {
     height: 100vh;
-    gap: 0;
+    gap: 12px;
+    padding: 12px;
+    box-sizing: border-box;
     background: var(--bg-gradient);
 
     .session-sidebar {
       flex: none;
       background: var(--card-bg);
-      border-radius: 0;
-      border-right: 1px solid var(--border-color);
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
       -webkit-app-region: no-drag;
       backdrop-filter: blur(20px);
 
@@ -375,8 +379,8 @@
 
       .session-avatar {
         border-radius: 10px;
-        width: 42px !important;
-        height: 42px !important;
+        width: 40px !important;
+        height: 40px !important;
       }
 
       .unread-badge {
@@ -412,9 +416,9 @@
 
       .skeleton-item {
         .skeleton-avatar {
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
           background: var(--bg-tertiary);
         }
 
@@ -449,8 +453,11 @@
     }
 
     .message-area {
-      border-radius: 0;
-      background: var(--bg-secondary);
+      border-radius: 14px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+      overflow: hidden;
       -webkit-app-region: no-drag;
 
       .message-header {
@@ -462,7 +469,7 @@
         border-bottom: none;
         -webkit-app-region: drag;
         backdrop-filter: blur(14px);
-        box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 70%, transparent);
+        box-shadow: none;
 
         .session-avatar {
           width: 36px;
@@ -475,7 +482,7 @@
           -webkit-app-region: no-drag;
 
           h3 {
-            font-size: 15px;
+            font-size: var(--font-md, 15px);
             font-weight: 600;
             color: var(--text-primary);
           }
@@ -631,8 +638,9 @@
             color: var(--on-primary);
             border-radius: 18px 18px 4px 18px;
             padding: 10px 14px;
-            font-size: 14px;
+            font-size: var(--font-base, 14px);
             line-height: 1.5;
+            overflow-wrap: anywhere;
             box-shadow: 0 2px 10px var(--primary-light);
           }
 
@@ -647,8 +655,9 @@
             color: var(--text-primary);
             border-radius: 18px 18px 18px 4px;
             padding: 10px 14px;
-            font-size: 14px;
+            font-size: var(--font-base, 14px);
             line-height: 1.5;
+            overflow-wrap: anywhere;
             backdrop-filter: blur(10px);
             border: 1px solid var(--border-color);
           }
@@ -761,27 +770,24 @@
       }
     }
 
-    .resize-handle {
-      width: 4px;
-      margin-left: -2px;
-      margin-right: -2px;
-      background: transparent;
-      cursor: col-resize;
-      -webkit-app-region: no-drag;
-      transition: background 0.2s;
-      position: relative;
-      z-index: 10;
-
-      &:hover {
-        background: var(--primary);
-        opacity: 0.4;
-      }
-    }
-
-    &.resizing .resize-handle {
-      background: var(--primary);
-    }
   }
+}
+
+.chat-page:not(.standalone) {
+  display: grid;
+  grid-template-columns: var(--chat-session-width, 300px) minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+
+  .session-sidebar,
+  .message-area {
+    width: auto !important;
+    min-width: 0;
+  }
+}
+
+.chat-page.standalone {
+  display: flex;
 }
 
 // 左侧会话列表
@@ -819,8 +825,8 @@
   }
 
   .icon-btn {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     border: none;
     background: transparent;
     border-radius: 6px;
@@ -837,6 +843,11 @@
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    &:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
     }
 
     .spin {
@@ -1035,6 +1046,7 @@
   border-bottom: none;
   border-radius: 10px;
   margin: 0 4px;
+  min-height: 68px;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 
   &:hover {
@@ -1047,8 +1059,8 @@
 }
 
 .session-avatar {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
@@ -1072,7 +1084,7 @@
 
   .avatar-letter {
     color: white;
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
   }
 
@@ -1109,7 +1121,7 @@
 }
 
 .session-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1119,8 +1131,9 @@
 }
 
 .session-time {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
@@ -1132,7 +1145,7 @@
 }
 
 .session-summary {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -1338,7 +1351,7 @@
     color: white;
 
     .hongbao-greeting {
-      font-size: 15px;
+      font-size: var(--font-md, 15px);
       font-weight: 500;
       margin-bottom: 6px;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -1700,6 +1713,67 @@
   }
 }
 
+.chat-header-more-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.chat-header-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--layer-popover, 2800);
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 96px));
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+
+  > button {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    white-space: normal;
+    cursor: pointer;
+
+    &:hover,
+    &:active {
+      background: var(--bg-hover);
+    }
+
+    &:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: -1px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    svg {
+      flex: 0 0 auto;
+    }
+  }
+}
+
 .message-content-wrapper {
   flex: 1;
   display: flex;
@@ -1937,28 +2011,6 @@
     background: var(--bg-tertiary);
     color: var(--text-primary);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  }
-}
-
-// 拖动调节条
-.resize-handle {
-  width: 4px;
-  cursor: col-resize;
-  background: transparent;
-  transition: background 0.2s;
-  flex-shrink: 0;
-
-  &:hover {
-    background: var(--primary);
-  }
-}
-
-// 拖动时禁用选择
-.chat-page.resizing {
-  user-select: none;
-
-  .resize-handle {
-    background: var(--primary);
   }
 }
 
@@ -2997,15 +3049,24 @@
   }
 }
 
-// 会话详情面板
+// 会话详情面板与右侧抽屉
+.drawer-panel,
+.overlay-panel,
+.omnimind-queue-overlay,
+.omnimind-queue-drawer,
 .detail-panel {
-  width: clamp(280px, 25vw, 360px);
-  min-width: 280px;
-  max-width: 360px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 15;
+  width: min(340px, calc(100% - 24px));
+  min-width: 300px;
+  max-width: 340px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3376,6 +3437,22 @@
       flex-shrink: 0;
       user-select: text;
     }
+  }
+}
+
+.message-area.compact-inspector {
+  .detail-panel {
+    position: absolute;
+    top: 64px;
+    right: 10px;
+    bottom: 10px;
+    z-index: var(--layer-popover);
+  }
+}
+
+.message-area:not(.compact-inspector) {
+  .message-list {
+    min-width: 320px;
   }
 }
 
@@ -5659,15 +5736,15 @@
   }
 
   .fold-entry-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
-    background: #fff;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--bg-tertiary);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: #fa9d3b;
+    color: var(--warning);
   }
 
   .session-name {
@@ -5685,15 +5762,15 @@
   }
 
   .biz-entry-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
-    background: #fff;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--bg-tertiary);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: #07c160;
+    color: var(--primary);
   }
 
   .session-name {
@@ -6125,8 +6202,10 @@
 
 // Modern chat surface overrides for the refactored Chat components.
 .chat-page {
-  gap: 0;
-  background: var(--bg-sidebar);
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  background: var(--bg-primary);
 
   &:not(.standalone) {
     .message-area {
@@ -6136,22 +6215,17 @@
 }
 
 .session-sidebar {
-  background: var(--bg-sidebar);
-  border-right: 0;
-  border-radius: 0;
-}
-
-.resize-handle {
-  background: transparent;
-
-  &:hover {
-    background: color-mix(in srgb, var(--text-tertiary) 18%, transparent);
-  }
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
 }
 
 .message-area {
-  background: var(--bg-primary);
-  border-radius: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
   box-shadow: none;
 }
 
@@ -6159,31 +6233,34 @@
   background: var(--bg-primary);
 
   .session-sidebar {
-    background: var(--bg-sidebar);
-    border-right: 0;
-    backdrop-filter: none;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    backdrop-filter: blur(20px);
   }
 
   .message-area {
-    background: var(--bg-primary);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
 
     .message-header {
       min-height: 64px;
       padding: 12px 22px;
       border-bottom: 0;
-      background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+      background: color-mix(in srgb, var(--card-bg) 88%, transparent);
       backdrop-filter: blur(14px);
-      box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 70%, transparent);
+      box-shadow: none;
 
       .session-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
       }
 
       .header-actions .icon-btn {
-        width: 34px;
-        height: 34px;
+        width: 44px;
+        height: 44px;
         border: 0;
         border-radius: 8px;
         background: transparent;
@@ -6215,21 +6292,21 @@
   min-height: 64px;
   padding: 12px 22px;
   border-bottom: 0;
-  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 88%, transparent);
   backdrop-filter: blur(14px);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 70%, transparent);
+  box-shadow: none;
 
   .session-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
   }
 
   .header-info {
     min-width: 0;
 
     h3 {
-      font-size: 15px;
+      font-size: var(--font-md, 15px);
       font-weight: 600;
       letter-spacing: 0;
       line-height: 1.25;
@@ -6237,12 +6314,24 @@
   }
 
   .header-actions {
+    display: flex;
+    align-items: center;
     gap: 2px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .header-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
   }
 
   .icon-btn {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
     border: 0;
     border-radius: 8px;
     background: transparent;
@@ -6258,6 +6347,11 @@
     &.active {
       background: var(--primary-light);
       color: var(--primary);
+    }
+
+    &:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
     }
   }
 }
@@ -6338,7 +6432,7 @@
   .bubble-avatar {
     width: 36px;
     height: 36px;
-    border-radius: 50%;
+    border-radius: 10px;
     background: var(--bg-tertiary);
   }
 
@@ -6348,18 +6442,16 @@
   }
 
   .bubble-content {
-    border-radius: 18px;
     padding: 10px 14px;
     line-height: 1.56;
-    box-shadow: none;
-    border: 0;
   }
 
   &.sent {
     .bubble-content {
       background: var(--primary);
       color: var(--on-primary);
-      border-radius: 18px;
+      border-radius: 18px 18px 4px 18px !important;
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 25%, transparent);
     }
 
     .bubble-body {
@@ -6369,9 +6461,11 @@
 
   &.received {
     .bubble-content {
-      background: var(--bg-tertiary);
+      background: var(--card-bg, var(--bg-secondary));
       color: var(--text-primary);
-      border-radius: 18px;
+      border-radius: 18px 18px 18px 4px !important;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
       backdrop-filter: none;
     }
 
@@ -6420,6 +6514,13 @@
   }
 }
 
+.message-bubble.image .bubble-content,
+.message-bubble.emoji .bubble-content,
+.message-bubble.video .bubble-content,
+.message-bubble .bubble-content:has(> .image-message-wrapper),
+.message-bubble .bubble-content:has(> .image-stage),
+.message-bubble .bubble-content:has(> .image-message),
+.message-bubble .bubble-content:has(> img),
 .message-bubble .bubble-content:has(> .link-message),
 .message-bubble .bubble-content:has(> .card-message),
 .message-bubble .bubble-content:has(> .chat-record-message),
@@ -6854,8 +6955,8 @@
     }
 
     .icon-btn {
-      width: 32px;
-      height: 32px;
+      width: 44px;
+      height: 44px;
     }
   }
 

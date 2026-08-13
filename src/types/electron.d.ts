@@ -585,10 +585,11 @@ export interface ElectronAPI {
   }
   key: {
     autoGetDbKey: () => Promise<{ success: boolean; key?: string; error?: string; logs?: string[] }>
-    autoGetImageKey: (manualDir?: string, wxid?: string) => Promise<{ success: boolean; xorKey?: number; aesKey?: string; verified?: boolean; error?: string }>
-    scanImageKeyFromMemory: (userDir: string) => Promise<{ success: boolean; xorKey?: number; aesKey?: string; error?: string }>
+    autoGetImageKey: () => Promise<{ success: boolean; xorKey?: number; aesKey?: string; verified?: boolean; error?: string }>
+    scanImageKeyFromMemory: () => Promise<{ success: boolean; xorKey?: number; aesKey?: string; error?: string }>
     onDbKeyStatus: (callback: (payload: { message: string; level: number }) => void) => () => void
     onImageKeyStatus: (callback: (payload: { message: string }) => void) => () => void
+    onImageKeysChanged: (callback: (payload: { reason: 'updated' }) => void) => () => void
   }
   chat: {
     connect: () => Promise<{ success: boolean; error?: string }>

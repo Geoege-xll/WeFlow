@@ -1,0 +1,97 @@
+.weflow-tabs {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--glass-card-bg, var(--bg-tertiary));
+  border: 1px solid var(--glass-border, var(--border-color));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 10px;
+  gap: 2px;
+
+  &.weflow-tabs-sm {
+    padding: 2px;
+    border-radius: 8px;
+    .weflow-tab-item {
+      padding: 4px 10px;
+      font-size: var(--font-xs, 11px);
+      gap: 4px;
+    }
+  }
+
+  &.weflow-tabs-md {
+    padding: 3px;
+    border-radius: 10px;
+    .weflow-tab-item {
+      padding: 6px 14px;
+      font-size: var(--font-sm, 12px);
+      gap: 6px;
+    }
+  }
+
+  &.weflow-tabs-lg {
+    padding: 4px;
+    border-radius: 12px;
+    .weflow-tab-item {
+      padding: 8px 18px;
+      font-size: var(--font-base, 13px);
+      gap: 8px;
+    }
+  }
+
+  .weflow-tab-item {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 500;
+    line-height: 1;
+    border-radius: 7px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.18s cubic-bezier(0.4, 0, 0.2, 1), color 0.18s ease, box-shadow 0.18s ease;
+    white-space: nowrap;
+
+    &:hover:not(:disabled) {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    &.active {
+      background: var(--card-inner-bg, #ffffff);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 1px rgba(0, 0, 0, 0.06);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .weflow-tab-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .weflow-tab-label {
+      line-height: 1.2;
+    }
+
+    .weflow-tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1px 5px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--primary-light);
+      color: var(--primary);
+      line-height: 1;
+    }
+  }
+}

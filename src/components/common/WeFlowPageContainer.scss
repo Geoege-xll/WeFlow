@@ -1,0 +1,260 @@
+.weflow-page-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: transparent;
+  overflow: hidden;
+
+  &.mac-detail-view {
+    border-top-left-radius: 0;
+  }
+
+  .weflow-page-header {
+    flex-shrink: 0;
+    padding: 12px 20px;
+    background: var(--glass-bg, var(--bg-primary));
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 10;
+
+    .weflow-page-header-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .weflow-page-header-titles {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+
+      .weflow-page-nav-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        background: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 2px;
+
+        .weflow-page-nav-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border-radius: 6px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+
+          &:hover:not(:disabled) {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+          }
+
+          &:disabled {
+            opacity: 0.4;
+            cursor: default;
+          }
+
+          &:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 1px;
+          }
+        }
+      }
+
+      .weflow-page-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--primary-light, rgba(var(--primary-rgb, 59, 130, 246), 0.12));
+        color: var(--primary);
+        flex-shrink: 0;
+
+        svg {
+          width: 18px;
+          height: 18px;
+        }
+      }
+
+      .weflow-page-back-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--glass-border, var(--border-color));
+        background: var(--glass-card-bg, var(--card-bg));
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.15s ease;
+
+        &:hover {
+          background: var(--bg-hover);
+          transform: translateX(-1px);
+        }
+      }
+
+      .weflow-page-header-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+      }
+
+      .weflow-page-title {
+        font-size: var(--font-xl, 18px);
+        line-height: var(--line-height-xl, 1.3);
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .weflow-page-subtitle,
+      .weflow-page-description {
+        font-size: var(--font-xs, 12px);
+        line-height: var(--line-height-xs, 1.3);
+        color: var(--text-tertiary);
+        margin: 2px 0 0 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
+    .weflow-page-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .weflow-page-header-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+  }
+
+  .weflow-page-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+
+    &.scrollable {
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 24px;
+    }
+
+    &.fixed {
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .content-unavailable-view,
+    .weflow-page-empty {
+      height: 100%;
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-tertiary);
+      text-align: center;
+      padding: 32px 16px;
+
+      .content-unavailable-icon,
+      .weflow-page-empty-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-tertiary);
+        opacity: 0.65;
+        margin-bottom: 12px;
+
+        svg {
+          width: 48px;
+          height: 48px;
+        }
+
+        &.spin {
+          animation: weflow-spin 1s linear infinite;
+        }
+      }
+
+      .content-unavailable-title,
+      .weflow-page-empty-text {
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.4;
+        color: var(--text-primary);
+        margin: 0;
+      }
+
+      .content-unavailable-description {
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--text-tertiary);
+        margin: 6px 0 0 0;
+        max-width: 400px;
+      }
+
+      .content-unavailable-action {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+    }
+  }
+
+  .weflow-page-footer,
+  .safe-area-bottom-inset {
+    flex-shrink: 0;
+    padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--glass-bg, rgba(255, 255, 255, 0.75));
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weflow-page-container .content-unavailable-icon.spin {
+    animation-duration: 2s;
+  }
+}
+
+@keyframes weflow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

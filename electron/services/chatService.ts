@@ -8777,7 +8777,10 @@ class ChatService {
   async getImageData(sessionId: string, msgId: string): Promise<{ success: boolean; data?: string; error?: string }> {
     try {
       const localId = parseInt(msgId, 10)
-      if (!this.connected) await this.connect()
+      if (!this.connected) {
+        const connectResult = await this.connect()
+        if (!connectResult.success) return { success: false, error: connectResult.error || '数据库连接失败' }
+      }
 
       // 1. 获取消息详情
       const msgResult = await this.getMessageByLocalId(sessionId, localId)

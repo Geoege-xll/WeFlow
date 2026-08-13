@@ -158,6 +158,19 @@ export function encryptDatViaNative(
 
 type WorkerDecryptResult = { data: Buffer; ext: string; isWxgf: boolean; meta: NativeDatMeta } | null
 
+export async function resolveNativeWorkerAttempt(
+  workerAttempt: () => Promise<WorkerDecryptResult>,
+  directAttempt: () => WorkerDecryptResult
+): Promise<WorkerDecryptResult> {
+  try {
+    const workerResult = await workerAttempt()
+    if (workerResult) return workerResult
+  } catch {
+    // A failed or disappearing worker must preserve the legacy direct native behavior.
+  }
+  return directAttempt()
+}
+
 type PendingJob = {
   resolve: (value: WorkerDecryptResult) => void
 }
@@ -246,20 +259,24 @@ export async function decryptDatViaNativeAsync(
   if (!shouldEnableNative()) return null
 
   const worker = ensureDecryptWorker()
-  if (!worker) {
-    return decryptDatViaNative(inputPath, xorKey, aesKey)
-  }
+  if (!worker) return decryptDatViaNative(inputPath, xorKey, aesKey)
 
   const id = ++workerJobSeq
-  return new Promise<WorkerDecryptResult>((resolve) => {
-    pendingJobs.set(id, { resolve })
-    try {
-      worker.postMessage({ id, datPath: inputPath, xorKey, aesKey })
-    } catch {
-      pendingJobs.delete(id)
-      resolve(decryptDatViaNative(inputPath, xorKey, aesKey))
-    }
-  })
+  let workerResult: WorkerDecryptResult = null
+  try {
+    workerResult = await new Promise<WorkerDecryptResult>((resolve) => {
+      pendingJobs.set(id, { resolve })
+      try {
+        worker.postMessage({ id, datPath: inputPath, xorKey, aesKey })
+      } catch {
+        pendingJobs.delete(id)
+        resolve(null)
+      }
+    })
+  } catch {
+    workerResult = null
+  }
+  return workerResult || decryptDatViaNative(inputPath, xorKey, aesKey)
 }
 
 export function terminateDecryptWorker(): void {

@@ -7,7 +7,7 @@ import { join, dirname } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { readFile, writeFile, mkdir, rm, readdir, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { ConfigService } from './services/config'
+import { assertNoImageKeyRequestArguments, ConfigService } from './services/config'
 import { dbPathService } from './services/dbPathService'
 import { wcdbService } from './services/wcdbService'
 import { chatService } from './services/chatService'
@@ -4495,16 +4495,46 @@ function registerIpcHandlers() {
     })
   })
 
-  ipcMain.handle('key:autoGetImageKey', async (event, manualDir?: string, wxid?: string) => {
-    return keyService.autoGetImageKey(manualDir, (message: string) => {
+  ipcMain.handle('key:autoGetImageKey', async (event, ...args: unknown[]) => {
+    assertNoImageKeyRequestArguments('key:autoGetImageKey', args)
+    const trustedDbPath = String(configService!.get('dbPath') || '').trim()
+    const trustedWxid = String(configService!.get('myWxid') || '').trim()
+    if (!trustedDbPath) return { success: false, error: '请先配置数据库目录' }
+    const trustedAccountPath = trustedWxid && !trustedDbPath.endsWith(`/${trustedWxid}`)
+      ? join(trustedDbPath, trustedWxid)
+      : trustedDbPath
+    const result = await keyService.autoGetImageKey(trustedAccountPath, (message: string) => {
       event.sender.send('key:imageKeyStatus', { message })
-    }, wxid)
+    }, trustedWxid)
+    if (result.success && typeof result.xorKey === 'number' && typeof result.aesKey === 'string') {
+      configService!.setImageKeysForCurrentWxid(result.xorKey, result.aesKey)
+      imageDecryptService.invalidateRuntimeCaches()
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('image:keysChanged', { reason: 'updated' })
+      }
+    }
+    return result
   })
 
-  ipcMain.handle('key:scanImageKeyFromMemory', async (event, userDir: string) => {
-    return keyService.autoGetImageKeyByMemoryScan(userDir, (message: string) => {
+  ipcMain.handle('key:scanImageKeyFromMemory', async (event, ...args: unknown[]) => {
+    assertNoImageKeyRequestArguments('key:scanImageKeyFromMemory', args)
+    const trustedDbPath = String(configService!.get('dbPath') || '').trim()
+    const trustedWxid = String(configService!.get('myWxid') || '').trim()
+    if (!trustedDbPath) return { success: false, error: '请先配置数据库目录' }
+    const trustedAccountPath = trustedWxid && !trustedDbPath.endsWith(`/${trustedWxid}`)
+      ? join(trustedDbPath, trustedWxid)
+      : trustedDbPath
+    const result = await keyService.autoGetImageKeyByMemoryScan(trustedAccountPath, (message: string) => {
       event.sender.send('key:imageKeyStatus', { message })
     })
+    if (result.success && typeof result.xorKey === 'number' && typeof result.aesKey === 'string') {
+      configService!.setImageKeysForCurrentWxid(result.xorKey, result.aesKey)
+      imageDecryptService.invalidateRuntimeCaches()
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('image:keysChanged', { reason: 'updated' })
+      }
+    }
+    return result
   })
 
   // HTTP API 服务

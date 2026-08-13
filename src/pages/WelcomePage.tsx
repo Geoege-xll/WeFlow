@@ -552,8 +552,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
     setImageKeyPercent(0)
     setImageKeyStatus(source === 'prefetch-cache' ? '正在预计算图片密钥...' : '正在准备获取图片密钥...')
     try {
-      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath
-      const result = await window.electronAPI.key.autoGetImageKey(accountPath, wxid)
+      const result = await window.electronAPI.key.autoGetImageKey()
       if (result.success && result.aesKey) {
         if (typeof result.xorKey === 'number') setImageXorKey(`0x${result.xorKey.toString(16).toUpperCase().padStart(2, '0')}`)
         setImageAesKey(result.aesKey)
@@ -568,6 +567,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
       } else {
         setIsImageKeyVerified(false)
         setIsImageStepAutoCompleted(false)
+        setImageKeyStatus(result.error || '自动获取图片密钥失败')
         if (!options?.silentError) {
           setError(result.error || '自动获取图片密钥失败')
         }
@@ -575,6 +575,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
     } catch (e) {
       setIsImageKeyVerified(false)
       setIsImageStepAutoCompleted(false)
+      setImageKeyStatus(`自动获取图片密钥失败: ${e}`)
       if (!options?.silentError) {
         setError(`自动获取图片密钥失败: ${e}`)
       }
@@ -591,8 +592,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
     setImageKeyPercent(0)
     setImageKeyStatus('正在扫描内存...')
     try {
-      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath
-      const result = await window.electronAPI.key.scanImageKeyFromMemory(accountPath)
+      const result = await window.electronAPI.key.scanImageKeyFromMemory()
       if (result.success && result.aesKey) {
         if (typeof result.xorKey === 'number') setImageXorKey(`0x${result.xorKey.toString(16).toUpperCase().padStart(2, '0')}`)
         setImageAesKey(result.aesKey)
@@ -600,9 +600,11 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
         setIsImageStepAutoCompleted(false)
         setImageKeyStatus('内存扫描成功，已获取图片密钥')
       } else {
+        setImageKeyStatus(result.error || '内存扫描获取图片密钥失败')
         setError(result.error || '内存扫描获取图片密钥失败')
       }
     } catch (e) {
+      setImageKeyStatus(`内存扫描失败: ${e}`)
       setError(`内存扫描失败: ${e}`)
     } finally {
       setIsFetchingImageKey(false)

@@ -10,6 +10,152 @@ type DbKeyResult = { success: boolean; key?: string; error?: string; logs?: stri
 type ImageKeyResult = { success: boolean; xorKey?: number; aesKey?: string; verified?: boolean; error?: string }
 const execFileAsync = promisify(execFile)
 
+export type RecentV2TemplateCandidate = { ciphertext: Buffer; mtimeMs: number; xorTail: [number, number] }
+export type VerifiedImageKeyPair = { aesKey: string; xorKey: number }
+type ImageScanHelperResult = { key: string | null; permissionError: boolean; cancelled: boolean }
+
+class ImageMemoryScanCancelledError extends Error {
+  constructor() {
+    super('User canceled')
+    this.name = 'ImageMemoryScanCancelledError'
+  }
+}
+
+const xorKeyFromTail = (tail: [number, number]): number | null => {
+  const xorKey = tail[0] ^ 0xff
+  return xorKey === (tail[1] ^ 0xd9) ? xorKey : null
+}
+
+export const selectImageScanProcessCandidates = (processList: string, limit = 6): number[] => {
+  const hardLimit = Math.max(1, Math.min(8, Math.floor(limit)))
+  const parsed: Array<{ pid: number; command: string; rank: number }> = []
+  for (const line of processList.split(/\r?\n/)) {
+    const match = line.trim().match(/^(\d+)\s+(.+)$/)
+    if (!match) continue
+    const pid = Number(match[1])
+    const command = match[2]
+    if (!Number.isSafeInteger(pid) || pid <= 0) continue
+    if (!command.includes('/Applications/WeChat.app/Contents/')) continue
+    const isMain = /\/WeChat\.app\/Contents\/MacOS\/WeChat(?:\s|$)/.test(command)
+    const isAppEx = /\/WeChatAppEx\.app\/Contents\/MacOS\/WeChatAppEx(?:\s|$)/.test(command)
+    const isRenderer = /\/Helpers\/WeChatAppEx Helper \(Renderer\)\.app\/Contents\/MacOS\/WeChatAppEx Helper \(Renderer\)(?:\s|$)/.test(command) &&
+      /--type=renderer(?:\s|$)/.test(command)
+    if (!isMain && !isAppEx && !isRenderer) continue
+    if (/crashpad|image_scan_helper/i.test(command)) continue
+    parsed.push({ pid, command, rank: isMain ? 0 : isRenderer ? 1 : 2 })
+  }
+  return parsed
+    .sort((a, b) => a.rank - b.rank || (a.rank === 0 ? a.pid - b.pid : b.pid - a.pid))
+    .slice(0, hardLimit)
+    .map(({ pid }) => pid)
+}
+
+const verifyAesKeyBytes = (keyBytes: Buffer, ciphertext: Buffer): boolean => {
+  try {
+    if (keyBytes.length !== 16 || ciphertext.length !== 16) return false
+    const decipher = crypto.createDecipheriv('aes-128-ecb', keyBytes, null)
+    decipher.setAutoPadding(false)
+    const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+    return (
+      (plain[0] === 0xff && plain[1] === 0xd8 && plain[2] === 0xff) ||
+      (plain[0] === 0x89 && plain[1] === 0x50 && plain[2] === 0x4e && plain[3] === 0x47) ||
+      (plain[0] === 0x52 && plain[1] === 0x49 && plain[2] === 0x46 && plain[3] === 0x46) ||
+      (plain[0] === 0x77 && plain[1] === 0x78 && plain[2] === 0x67 && plain[3] === 0x66) ||
+      (plain[0] === 0x47 && plain[1] === 0x49 && plain[2] === 0x46)
+    )
+  } catch {
+    return false
+  }
+}
+
+export const normalizeScannedAesKey = (candidate: string, ciphertext: Buffer): string | null => {
+  const normalized = String(candidate || '').trim()
+  if (normalized.length < 16) return null
+  if (/^[0-9a-f]{32}$/i.test(normalized)) {
+    const rawKey = Buffer.from(normalized, 'hex')
+    if (verifyAesKeyBytes(rawKey, ciphertext)) return normalized.toLowerCase()
+  }
+  const asciiKey = normalized.slice(0, 16)
+  return verifyAesKeyBytes(Buffer.from(asciiKey, 'ascii'), ciphertext) ? asciiKey : null
+}
+
+export const scanRecentTemplateCandidates = async (
+  templates: Array<Pick<RecentV2TemplateCandidate, 'ciphertext' | 'mtimeMs' | 'xorTail'>>,
+  scan: (ciphertext: Buffer) => Promise<string | null>,
+  fallbackXorKey: number | null = null
+): Promise<VerifiedImageKeyPair | null> => {
+  const orderedTemplates = [...templates].sort((a, b) => b.mtimeMs - a.mtimeMs)
+  const newestTemplate = orderedTemplates[0]
+  if (!newestTemplate) return null
+  const candidate = await scan(newestTemplate.ciphertext)
+  if (!candidate) return null
+  for (const template of orderedTemplates) {
+    const normalized = normalizeScannedAesKey(candidate, template.ciphertext)
+    if (!normalized) continue
+    const xorKey = xorKeyFromTail(template.xorTail) ?? fallbackXorKey
+    if (xorKey !== null) return { aesKey: normalized, xorKey }
+  }
+  return null
+}
+
+export const collectRecentV2TemplateCandidates = (
+  userDir: string,
+  limit = 32
+): { templates: RecentV2TemplateCandidate[]; xorKey: number | null } => {
+  const hardLimit = Math.max(1, Math.min(100, Math.floor(limit)))
+  const magic = Buffer.from([0x07, 0x08, 0x56, 0x32, 0x08, 0x07])
+  const templates: RecentV2TemplateCandidate[] = []
+  const visit = (directory: string): void => {
+    let entries: ReturnType<typeof readdirSync>
+    try {
+      entries = readdirSync(directory, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const fullPath = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        visit(fullPath)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith('_t.dat')) continue
+      try {
+        const data = readFileSync(fullPath)
+        if (data.length < 0x1f || !data.subarray(0, 6).equals(magic)) continue
+        const candidate: RecentV2TemplateCandidate = {
+          ciphertext: Buffer.from(data.subarray(0x0f, 0x1f)),
+          mtimeMs: statSync(fullPath).mtimeMs,
+          xorTail: [data[data.length - 2], data[data.length - 1]]
+        }
+        templates.push(candidate)
+        templates.sort((a, b) => b.mtimeMs - a.mtimeMs)
+        if (templates.length > hardLimit) templates.length = hardLimit
+      } catch {
+        // Ignore transient/unreadable candidates and continue the bounded traversal.
+      }
+    }
+  }
+  visit(userDir)
+
+  const tailCounts = new Map<string, number>()
+  for (const template of templates) {
+    const tailKey = `${template.xorTail[0]}_${template.xorTail[1]}`
+    tailCounts.set(tailKey, (tailCounts.get(tailKey) || 0) + 1)
+  }
+  let xorKey: number | null = null
+  let maxCount = 0
+  for (const [tailKey, count] of tailCounts) {
+    if (count <= maxCount) continue
+    const [x, y] = tailKey.split('_').map(Number)
+    const candidate = xorKeyFromTail([x, y])
+    if (candidate !== null) {
+      xorKey = candidate
+      maxCount = count
+    }
+  }
+  return { templates, xorKey }
+}
+
 export class KeyServiceMac {
   private koffi: any = null
   private lib: any = null
@@ -839,104 +985,63 @@ export class KeyServiceMac {
     try {
       // 1. 查找模板文件获取密文和 XOR 密钥
       onProgress?.('正在查找模板文件...')
-      let result = await this._findTemplateData(userDir, 32)
-      let { ciphertext, xorKey } = result
+      let result = collectRecentV2TemplateCandidates(userDir, 32)
+      let { templates, xorKey } = result
       
-      if (ciphertext && xorKey === null) {
+      if (templates.length > 0 && xorKey === null) {
         onProgress?.('未找到有效密钥，尝试扫描更多文件...')
-        result = await this._findTemplateData(userDir, 100)
+        result = collectRecentV2TemplateCandidates(userDir, 100)
+        templates = result.templates
         xorKey = result.xorKey
       }
       
-      if (!ciphertext) return { success: false, error: '未找到 V2 模板文件，请先在微信中查看几张图片' }
-      if (xorKey === null) return { success: false, error: '未能从模板文件中计算出有效的 XOR 密钥' }
+      if (templates.length === 0) return { success: false, error: '未找到 V2 模板文件，请先在微信中查看几张图片' }
 
-      onProgress?.(`XOR 密钥: 0x${xorKey.toString(16).padStart(2, '0')}，正在查找微信进程...`)
+      onProgress?.('已找到近期模板，正在查找微信进程...')
 
       // 2. 持续轮询微信 PID 与内存扫描，兼容微信崩溃后重启 PID 变化
       const deadline = Date.now() + 60_000
-      let scanCount = 0
-      let lastPid: number | null = null
       while (Date.now() < deadline) {
-        const pid = await this.findWeChatPid()
-        if (!pid) {
+        const pids = await this.getImageScanProcessCandidates()
+        if (pids.length === 0) {
           onProgress?.('暂未检测到微信主进程，请确认微信已经重新打开...')
           await new Promise(r => setTimeout(r, 2000))
           continue
         }
-        if (lastPid !== pid) {
-          lastPid = pid
-          onProgress?.(`已找到微信进程 PID=${pid}，正在扫描内存...`)
-        }
-        scanCount++
-        onProgress?.(`第 ${scanCount} 次扫描内存，请在微信中打开图片大图...`)
-        const aesKey = await this._scanMemoryForAesKey(pid, ciphertext, onProgress)
-        if (aesKey) {
+        onProgress?.(`已找到 ${pids.length} 个微信图片进程，正在扫描内存...`)
+        onProgress?.('正在扫描内存，请保持微信图片大图打开...')
+        const keyPair = await scanRecentTemplateCandidates(
+          templates.slice(0, 4),
+          (ciphertext) => this._scanMemoryForAesKeyCandidates(pids, ciphertext, onProgress),
+          xorKey
+        )
+        if (keyPair) {
           onProgress?.('密钥获取成功')
-          return { success: true, xorKey, aesKey }
+          return { success: true, ...keyPair }
         }
-        await new Promise(r => setTimeout(r, 5000))
+        const error = '未找到与近期图片模板匹配的 AES 密钥'
+        onProgress?.(error)
+        return { success: false, error }
       }
 
-      return { success: false, error: '60 秒内未找到 AES 密钥' }
+      const error = '60 秒内未找到 AES 密钥'
+      onProgress?.(error)
+      return { success: false, error }
     } catch (e: any) {
-      return { success: false, error: `内存扫描失败: ${e.message}` }
+      if (e instanceof ImageMemoryScanCancelledError || e?.message === 'User canceled') {
+        const error = '已取消内存扫描，图片密钥未更改'
+        onProgress?.(error)
+        return { success: false, error }
+      }
+      const error = `内存扫描失败: ${e.message}`
+      onProgress?.(error)
+      return { success: false, error }
     }
   }
 
   private async _findTemplateData(userDir: string, limit: number = 32): Promise<{ ciphertext: Buffer | null; xorKey: number | null }> {
-    const V2_MAGIC = Buffer.from([0x07, 0x08, 0x56, 0x32, 0x08, 0x07])
-
-    const collect = (dir: string, results: string[], maxFiles: number) => {
-      if (results.length >= maxFiles) return
-      try {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          if (results.length >= maxFiles) break
-          const full = join(dir, entry.name)
-          if (entry.isDirectory()) collect(full, results, maxFiles)
-          else if (entry.isFile() && entry.name.endsWith('_t.dat')) results.push(full)
-        }
-      } catch { }
-    }
-
-    const files: string[] = []
-    collect(userDir, files, limit)
-
-    files.sort((a, b) => {
-      try { return statSync(b).mtimeMs - statSync(a).mtimeMs } catch { return 0 }
-    })
-
-    let ciphertext: Buffer | null = null
-    const tailCounts: Record<string, number> = {}
-
-    for (const f of files.slice(0, 32)) {
-      try {
-        const data = readFileSync(f)
-        if (data.length < 8) continue
-
-        if (data.subarray(0, 6).equals(V2_MAGIC) && data.length >= 2) {
-          const key = `${data[data.length - 2]}_${data[data.length - 1]}`
-          tailCounts[key] = (tailCounts[key] ?? 0) + 1
-        }
-
-        if (!ciphertext && data.subarray(0, 6).equals(V2_MAGIC) && data.length >= 0x1F) {
-          ciphertext = data.subarray(0xF, 0x1F)
-        }
-      } catch { }
-    }
-
-    let xorKey: number | null = null
-    let maxCount = 0
-    for (const [key, count] of Object.entries(tailCounts)) {
-      if (count > maxCount) { 
-        maxCount = count
-        const [x, y] = key.split('_').map(Number)
-        const k = x ^ 0xFF
-        if (k === (y ^ 0xD9)) xorKey = k
-      }
-    }
-
-    return { ciphertext, xorKey }
+    const result = collectRecentV2TemplateCandidates(userDir, limit)
+    return { ciphertext: result.templates[0]?.ciphertext || null, xorKey: result.xorKey }
   }
 
   private ensureMachApis(): boolean {
@@ -986,6 +1091,7 @@ export class KeyServiceMac {
       if (!this._needsElevation) {
         const direct = await this._spawnScanHelper(helperPath, pid, ciphertextHex, false, artifactPaths)
         if (direct.key) return direct.key
+        if (direct.cancelled) throw new ImageMemoryScanCancelledError()
         if (direct.permissionError) {
           console.warn('[KeyServiceMac] task_for_pid 权限不足，切换到 osascript 提权模式')
           this._needsElevation = true
@@ -995,15 +1101,12 @@ export class KeyServiceMac {
 
       // 2) 通过 osascript 以管理员权限运行 helper（SIP 下 ad-hoc 签名无法获取 task_for_pid）
       if (this._needsElevation) {
-        try {
-          await this.ensureExecutableBitsWithElevation(artifactPaths, 45_000)
-        } catch (e: any) {
-          console.warn('[KeyServiceMac] elevated chmod failed before image scan:', e?.message || e)
-        }
         const elevated = await this._spawnScanHelper(helperPath, pid, ciphertextHex, true, artifactPaths)
         if (elevated.key) return elevated.key
+        if (elevated.cancelled) throw new ImageMemoryScanCancelledError()
       }
     } catch (e: any) {
+      if (e instanceof ImageMemoryScanCancelledError) throw e
       console.warn('[KeyServiceMac] image_scan_helper unavailable, fallback to Mach API:', e?.message)
     }
 
@@ -1102,13 +1205,54 @@ export class KeyServiceMac {
     }
   }
 
+  private async getImageScanProcessCandidates(): Promise<number[]> {
+    try {
+      const { stdout } = await execFileAsync('/bin/ps', ['-A', '-o', 'pid=,command='])
+      return selectImageScanProcessCandidates(stdout, 6)
+    } catch {
+      const mainPid = await this.findWeChatPid()
+      return mainPid ? [mainPid] : []
+    }
+  }
+
+  private async _scanMemoryForAesKeyCandidates(
+    pids: number[],
+    ciphertext: Buffer,
+    onProgress?: (message: string) => void
+  ): Promise<string | null> {
+    const candidates = [...new Set(pids.filter(pid => Number.isSafeInteger(pid) && pid > 0))].slice(0, 8)
+    if (candidates.length === 0) return null
+    const helperPath = this.getImageScanHelperPath()
+    const ciphertextHex = ciphertext.toString('hex')
+    const artifactPaths = this.collectMacKeyArtifactPaths(helperPath)
+    this.ensureExecutableBitsBestEffort(artifactPaths)
+
+    if (!this._needsElevation) {
+      for (const pid of candidates) {
+        const direct = await this._spawnScanHelper(helperPath, pid, ciphertextHex, false, artifactPaths)
+        if (direct.key) return direct.key
+        if (direct.cancelled) throw new ImageMemoryScanCancelledError()
+        if (direct.permissionError) {
+          this._needsElevation = true
+          onProgress?.('需要管理员权限，请在弹出的对话框中输入密码...')
+          break
+        }
+      }
+      if (!this._needsElevation) return null
+    }
+
+    const elevated = await this._spawnScanHelperForCandidates(helperPath, candidates, ciphertextHex, artifactPaths)
+    if (elevated.cancelled) throw new ImageMemoryScanCancelledError()
+    return elevated.key
+  }
+
   private _spawnScanHelper(
     helperPath: string,
     pid: number,
     ciphertextHex: string,
     elevated: boolean,
     artifactPaths: string[] = []
-  ): Promise<{ key: string | null; permissionError: boolean }> {
+  ): Promise<ImageScanHelperResult> {
     return new Promise((resolve, reject) => {
       let child: ReturnType<typeof spawn>
       if (elevated) {
@@ -1123,28 +1267,100 @@ export class KeyServiceMac {
       }
       const tag = elevated ? '[image_scan_helper:elevated]' : '[image_scan_helper]'
       let stdout = '', stderr = ''
+      let settled = false
+      let killTimer: ReturnType<typeof setTimeout> | null = null
+      const finish = (result: ImageScanHelperResult): void => {
+        if (settled) return
+        settled = true
+        if (killTimer) clearTimeout(killTimer)
+        resolve(result)
+      }
       child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
       child.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()
         console.log(tag, chunk.toString().trim())
       })
-      child.on('error', reject)
+      child.on('error', (error) => {
+        if (settled) return
+        settled = true
+        if (killTimer) clearTimeout(killTimer)
+        reject(error)
+      })
       child.on('close', () => {
         const permissionError = !elevated && stderr.includes('task_for_pid failed')
+        const cancelled = elevated && /User canceled|用户取消|\(-128\)|-128/.test(`${stdout}\n${stderr}`)
         try {
           const lines = stdout.split(/\r?\n/).map(x => x.trim()).filter(Boolean)
           const last = lines[lines.length - 1]
-          if (!last) { resolve({ key: null, permissionError }); return }
+          if (!last) { finish({ key: null, permissionError, cancelled }); return }
           const payload = JSON.parse(last)
-          resolve({
+          finish({
             key: payload?.success && payload?.aesKey ? payload.aesKey : null,
-            permissionError
+            permissionError,
+            cancelled
           })
         } catch {
-          resolve({ key: null, permissionError })
+          finish({ key: null, permissionError, cancelled })
         }
       })
-      setTimeout(() => { try { child.kill('SIGTERM') } catch {} }, elevated ? 60_000 : 30_000)
+      killTimer = setTimeout(() => { try { child.kill('SIGTERM') } catch {} }, elevated ? 60_000 : 30_000)
+    })
+  }
+
+  private _spawnScanHelperForCandidates(
+    helperPath: string,
+    pids: number[],
+    ciphertextHex: string,
+    artifactPaths: string[]
+  ): Promise<ImageScanHelperResult> {
+    const safePids = pids.filter(pid => Number.isSafeInteger(pid) && pid > 0).slice(0, 8)
+    if (safePids.length === 0 || !/^[0-9a-f]{32}$/i.test(ciphertextHex)) {
+      return Promise.resolve({ key: null, permissionError: false, cancelled: false })
+    }
+    const chmodPart = artifactPaths.length > 0
+      ? `/bin/chmod +x ${artifactPaths.map(path => this.shellSingleQuote(path)).join(' ')} && `
+      : ''
+    const helper = this.shellSingleQuote(helperPath)
+    const shellCmd = `${chmodPart}for scan_pid in ${safePids.join(' ')}; do case "$scan_pid" in ${safePids.map(pid => `${pid}) out=$(${helper} ${pid} ${ciphertextHex})`).join(' ;; ')} ;; esac; /bin/echo "$out"; case "$out" in *'"success":true'*) break;; esac; done`
+    return new Promise((resolve, reject) => {
+      const child = spawn('/usr/bin/osascript', [
+        '-e',
+        `do shell script ${JSON.stringify(shellCmd)} with administrator privileges`
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+      let killTimer: ReturnType<typeof setTimeout> | null = null
+      const finish = (result: ImageScanHelperResult): void => {
+        if (settled) return
+        settled = true
+        if (killTimer) clearTimeout(killTimer)
+        resolve(result)
+      }
+      child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
+      child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+      child.on('error', (error) => {
+        if (settled) return
+        settled = true
+        if (killTimer) clearTimeout(killTimer)
+        reject(error)
+      })
+      child.on('close', () => {
+        const cancelled = /User canceled|用户取消|\(-128\)|-128/.test(`${stdout}\n${stderr}`)
+        for (const line of stdout.split(/\r?\n/)) {
+          try {
+            const payload = JSON.parse(line.trim())
+            if (payload?.success && typeof payload?.aesKey === 'string') {
+              finish({ key: payload.aesKey, permissionError: false, cancelled: false })
+              return
+            }
+          } catch {
+            // Ignore helper diagnostics and inspect the next bounded result line.
+          }
+        }
+        finish({ key: null, permissionError: false, cancelled })
+      })
+      killTimer = setTimeout(() => { try { child.kill('SIGTERM') } catch {} }, 60_000)
     })
   }
 

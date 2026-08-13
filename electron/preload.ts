@@ -224,8 +224,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 密钥获取
   key: {
     autoGetDbKey: () => ipcRenderer.invoke('key:autoGetDbKey'),
-    autoGetImageKey: (manualDir?: string, wxid?: string) => ipcRenderer.invoke('key:autoGetImageKey', manualDir, wxid),
-    scanImageKeyFromMemory: (userDir: string) => ipcRenderer.invoke('key:scanImageKeyFromMemory', userDir),
+    autoGetImageKey: () => ipcRenderer.invoke('key:autoGetImageKey'),
+    scanImageKeyFromMemory: () => ipcRenderer.invoke('key:scanImageKeyFromMemory'),
     onDbKeyStatus: (callback: (payload: { message: string; level: number }) => void) => {
       ipcRenderer.on('key:dbKeyStatus', (_, payload) => callback(payload))
       return () => ipcRenderer.removeAllListeners('key:dbKeyStatus')
@@ -233,6 +233,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onImageKeyStatus: (callback: (payload: { message: string }) => void) => {
       ipcRenderer.on('key:imageKeyStatus', (_, payload) => callback(payload))
       return () => ipcRenderer.removeAllListeners('key:imageKeyStatus')
+    },
+    onImageKeysChanged: (callback: (payload: { reason: 'updated' }) => void) => {
+      const listener = (_: unknown, payload: { reason: 'updated' }) => callback(payload)
+      ipcRenderer.on('image:keysChanged', listener)
+      return () => ipcRenderer.removeListener('image:keysChanged', listener)
     }
   },
 

@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import Store from 'electron-store'
 import { expandHomePath } from '../utils/pathUtils'
 import { CacheMapStore } from './cacheMapStore'
-import type { AccountConfigBundle } from '../../shared/omnimind/account-bundle'
+import { isValidImageAesKey, isValidImageXorKey, type AccountConfigBundle } from '../../shared/omnimind/account-bundle'
 
 // 条件导入 electron（Worker 环境中不可用）
 let app: any = null
@@ -933,6 +933,43 @@ export class ConfigService {
     }
   }
 
+  setImageKeysForCurrentWxid(xorKey: number, aesKey: string): void {
+    const wxid = String(this.get('myWxid') || '').trim()
+    const normalizedAesKey = String(aesKey || '').trim()
+    if (!isValidImageXorKey(xorKey)) throw new Error('Invalid image XOR key')
+    if (!normalizedAesKey || !isValidImageAesKey(normalizedAesKey)) throw new Error('Invalid image AES key')
+    const current = this.getAccountBundle()
+    const inLockMode = Boolean(this.isLockMode() && this.unlockPassword)
+    const wxidConfigs = { ...(this.get('wxidConfigs') || {}) }
+    if (wxid) {
+      wxidConfigs[wxid] = {
+        ...(wxidConfigs[wxid] || {}),
+        imageXorKey: xorKey,
+        imageAesKey: normalizedAesKey,
+        updatedAt: Date.now()
+      }
+    }
+    const encryptedWxidConfigs = inLockMode
+      ? this.lockEncryptWxidConfigs(wxidConfigs)
+      : this.encryptWxidConfigs(wxidConfigs)
+    this.store.set({
+      ...current,
+      dbPath: expandHomePath(current.dbPath),
+      decryptKey: inLockMode ? this.lockEncrypt(current.decryptKey, this.unlockPassword!) : this.safeEncrypt(current.decryptKey),
+      imageXorKey: inLockMode ? this.lockEncrypt(String(xorKey), this.unlockPassword!) : this.safeEncrypt(String(xorKey)),
+      imageAesKey: inLockMode ? this.lockEncrypt(normalizedAesKey, this.unlockPassword!) : this.safeEncrypt(normalizedAesKey),
+      wxidConfigs: encryptedWxidConfigs
+    } as Partial<ConfigSchema>)
+    if (inLockMode) {
+      this.unlockedKeys.set('imageXorKey', xorKey)
+      this.unlockedKeys.set('imageAesKey', normalizedAesKey)
+      if (wxid) {
+        this.unlockedKeys.set(`wxid:${wxid}:imageXorKey`, xorKey)
+        this.unlockedKeys.set(`wxid:${wxid}:imageAesKey`, normalizedAesKey)
+      }
+    }
+  }
+
   /**
    * 清理账号目录名称（移除后缀）
    */
@@ -1163,5 +1200,10 @@ export class ConfigService {
       imageAesKey: String(this.get('imageAesKey') || ''), cachePath: String(this.get('cachePath') || ''),
       lastOpenedDb: String(this.get('lastOpenedDb') || '')
     }
+  }
+}
+export const assertNoImageKeyRequestArguments = (channel: string, args: unknown[]): void => {
+  if (!Array.isArray(args) || args.length !== 0) {
+    throw new Error(`${channel} does not accept renderer arguments`)
   }
 }

@@ -20,6 +20,11 @@
   }
 }
 
+.title-detail-actions .icon-btn:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .title-bar-left {
   display: inline-flex;
   align-items: center;
@@ -155,6 +160,50 @@
   flex: 0 0 auto;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 180ms ease, color 180ms ease;
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    &:hover:not(:disabled) {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    &:active:not(:disabled),
+    &.active {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    &:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.46;
+      cursor: not-allowed;
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+  }
 
   .btn-secondary {
     display: inline-flex;

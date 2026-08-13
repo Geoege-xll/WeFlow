@@ -128,6 +128,30 @@ const readAccountProfilesCache = (): Record<string, AccountProfileCacheEntry> =>
   }
 }
 
+type AccountConfigWriter = Pick<typeof configService, 'getDbPath' | 'getCachePath' | 'setAccountBundle'>
+
+export const applyLatestWxidConfig = async (
+  writer: AccountConfigWriter,
+  wxid: string,
+  wxidConfig: configService.WxidConfig | null
+): Promise<void> => {
+  const [latestDbPathValue, latestCachePathValue] = await Promise.all([
+    writer.getDbPath(),
+    writer.getCachePath()
+  ])
+  const latestDbPath = String(latestDbPathValue || '').trim()
+  if (!latestDbPath) throw new Error('database_path_unavailable')
+  await writer.setAccountBundle({
+    myWxid: wxid,
+    dbPath: latestDbPath,
+    decryptKey: wxidConfig?.decryptKey || '',
+    imageXorKey: typeof wxidConfig?.imageXorKey === 'number' ? wxidConfig.imageXorKey : 0,
+    imageAesKey: wxidConfig?.imageAesKey || '',
+    cachePath: String(latestCachePathValue || ''),
+    lastOpenedDb: latestDbPath
+  })
+}
+
 function AccountManagementPage() {
   const isDbConnected = useAppStore(state => state.isDbConnected)
   const setDbConnected = useAppStore(state => state.setDbConnected)
@@ -289,7 +313,7 @@ function AccountManagementPage() {
   }, [clearAnalyticsStoreCache, isDbConnected, resetChatStore])
 
   const applyWxidConfig = useCallback(async (wxid: string, wxidConfig: configService.WxidConfig | null) => {
-    await configService.setAccountBundle({ myWxid: wxid, dbPath, decryptKey: wxidConfig?.decryptKey || '', imageXorKey: typeof wxidConfig?.imageXorKey === 'number' ? wxidConfig.imageXorKey : 0, imageAesKey: wxidConfig?.imageAesKey || '', cachePath: String(await configService.getCachePath() || ''), lastOpenedDb: dbPath })
+    await applyLatestWxidConfig(configService, wxid, wxidConfig)
   }, [])
 
   const handleSwitchAccount = useCallback(async (wxid: string) => {
