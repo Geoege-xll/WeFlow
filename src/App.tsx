@@ -97,7 +97,7 @@ function App() {
     ? settingsRouteState?.backgroundLocation ?? settingsBackgroundRef.current
     : location
   const isExportRoute = routeLocation.pathname === '/export'
-  const usesNativeDetailContainer = routeLocation.pathname === '/chat' || routeLocation.pathname === '/backup' || routeLocation.pathname === '/export' || routeLocation.pathname === '/footprint' || routeLocation.pathname === '/annual-report' || routeLocation.pathname.startsWith('/analytics') || routeLocation.pathname === '/contacts' || routeLocation.pathname === '/sns' || routeLocation.pathname === '/resources' || routeLocation.pathname === '/insight-inbox'
+  const usesNativeDetailContainer = routeLocation.pathname === '/home' || routeLocation.pathname === '/chat' || routeLocation.pathname === '/backup' || routeLocation.pathname === '/export' || routeLocation.pathname === '/footprint' || routeLocation.pathname === '/annual-report' || routeLocation.pathname.startsWith('/analytics') || routeLocation.pathname === '/contacts' || routeLocation.pathname === '/sns' || routeLocation.pathname === '/resources' || routeLocation.pathname === '/insight-inbox'
   const currentHistoryIndex = Number.isFinite(Number(window.history.state?.idx))
     ? Number(window.history.state.idx)
     : 0
@@ -667,16 +667,12 @@ function App() {
               <h2>用户协议与隐私政策</h2>
             </div>
             <div className="agreement-content">
-              <p>欢迎使用WeFlow！在使用本软件前，请仔细阅读以下条款：</p>
+              <p>欢迎使用OmniMindWeChat！在使用本软件前，请仔细阅读以下条款：</p>
               <div className="agreement-notice">
                 <strong>这是免费软件，如果你是付费购买的话请骂死那个骗子。</strong>
                 <span className="agreement-notice-link">
-                  官方网站：
-                  <a href="https://weflow.top" target="_blank" rel="noreferrer">
-                    https://weflow.top
-                  </a>
-                  &nbsp;·&nbsp;
-                  <a href="https://github.com/hicccc77/WeFlow" target="_blank" rel="noreferrer">
+                  项目地址：
+                  <a href="https://github.com/Geoege-xll/WeFlow" target="_blank" rel="noreferrer">
                     GitHub 仓库
                   </a>
                 </span>
@@ -723,7 +719,7 @@ function App() {
             </div>
             <div className="agreement-content">
               <div className="agreement-text">
-                <p>为了持续改进 WeFlow 并提供更好的用户体验，我们希望收集一些匿名的使用数据。</p>
+                <p>为了持续改进 OmniMindWeChat 并提供更好的用户体验，我们希望收集一些匿名的使用数据。</p>
 
                 <h4>我们会收集什么？</h4>
                 <p>• 功能使用情况（如哪些功能被使用、使用频率）</p>

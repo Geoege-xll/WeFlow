@@ -28,8 +28,9 @@
     .sidebar-database-status {
       width: 40px;
       min-width: 40px;
-      padding: 7px;
-      grid-template-columns: 24px;
+      padding: 0;
+      display: flex;
+      align-items: center;
       justify-content: center;
       align-self: center;
     }
@@ -62,10 +63,6 @@
 
     .nav-section-title {
       display: none;
-    }
-
-    .sidebar-footer {
-      padding: 8px;
     }
 
     .nav-label {
@@ -104,38 +101,74 @@
   width: 100%;
   height: 40px;
   min-height: 40px;
-  padding: 0 9px;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 14px;
+  padding: 0 8px 0 9px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: var(--primary-light);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-family: inherit;
-  text-align: left;
-  cursor: pointer;
   overflow: hidden;
   box-sizing: border-box;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  user-select: none;
+
+  &.disconnected {
+    background: var(--bg-tertiary);
+  }
+}
+
+.sidebar-database-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 
   &:hover {
     background: var(--bg-hover);
-    border-color: var(--primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
   }
 
   &:active {
     background: var(--bg-tertiary);
   }
 
+  &.lock-enabled {
+    color: var(--primary);
+  }
+
+  &.lock-disabled {
+    color: var(--text-tertiary);
+    opacity: 0.7;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+
   &:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 1px;
-  }
-
-  &.disconnected {
-    background: var(--bg-tertiary);
   }
 }
 
@@ -386,6 +419,30 @@
   padding: 10px;
   overflow-y: auto;
   overflow-x: hidden;
+
+  // macOS 风格交互式滚动条：默认完全透明隐藏，仅在鼠标悬停或滚动互动时淡入显示
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+
+  &:hover::-webkit-scrollbar-thumb,
+  &:active::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-tertiary) 45%, transparent);
+
+    &:hover {
+      background: color-mix(in srgb, var(--text-secondary) 75%, transparent);
+    }
+  }
 }
 
 .nav-section {
@@ -517,20 +574,6 @@
   padding: 0 4px;
   font-size: 10px;
   box-shadow: 0 0 0 2px var(--bg-secondary);
-}
-
-.sidebar-lock-action {
-  justify-content: flex-start;
-}
-
-// ---- Footer ----
-.sidebar-footer {
-  padding: 8px 10px 12px;
-  border-top: 1px solid var(--border-color);
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {

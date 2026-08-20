@@ -1,4 +1,4 @@
-.weflow-page-container {
+.app-page-container {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -10,7 +10,7 @@
     border-top-left-radius: 0;
   }
 
-  .weflow-page-header {
+  .app-page-header {
     flex-shrink: 0;
     padding: 12px 20px;
     background: var(--glass-bg, var(--bg-primary));
@@ -22,20 +22,20 @@
     gap: 10px;
     z-index: 10;
 
-    .weflow-page-header-main {
+    .app-page-header-main {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
     }
 
-    .weflow-page-header-titles {
+    .app-page-header-titles {
       display: flex;
       align-items: center;
       gap: 12px;
       min-width: 0;
 
-      .weflow-page-nav-group {
+      .app-page-nav-group {
         display: inline-flex;
         align-items: center;
         gap: 2px;
@@ -44,7 +44,7 @@
         border-radius: 8px;
         padding: 2px;
 
-        .weflow-page-nav-btn {
+        .app-page-nav-btn {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -74,7 +74,7 @@
         }
       }
 
-      .weflow-page-icon {
+      .app-page-icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -91,7 +91,7 @@
         }
       }
 
-      .weflow-page-back-btn {
+      .app-page-back-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -110,14 +110,14 @@
         }
       }
 
-      .weflow-page-header-text {
+      .app-page-header-text {
         display: flex;
         flex-direction: column;
         justify-content: center;
         min-width: 0;
       }
 
-      .weflow-page-title {
+      .app-page-title {
         font-size: var(--font-xl, 18px);
         line-height: var(--line-height-xl, 1.3);
         font-weight: 700;
@@ -128,8 +128,8 @@
         text-overflow: ellipsis;
       }
 
-      .weflow-page-subtitle,
-      .weflow-page-description {
+      .app-page-subtitle,
+      .app-page-description {
         font-size: var(--font-xs, 12px);
         line-height: var(--line-height-xs, 1.3);
         color: var(--text-tertiary);
@@ -140,14 +140,14 @@
       }
     }
 
-    .weflow-page-header-actions {
+    .app-page-header-actions {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-shrink: 0;
     }
 
-    .weflow-page-header-filters {
+    .app-page-header-filters {
       display: flex;
       align-items: center;
       gap: 10px;
@@ -155,7 +155,7 @@
     }
   }
 
-  .weflow-page-body {
+  .app-page-body {
     flex: 1;
     min-height: 0;
     position: relative;
@@ -173,7 +173,7 @@
     }
 
     .content-unavailable-view,
-    .weflow-page-empty {
+    .app-page-empty {
       height: 100%;
       min-height: 240px;
       display: flex;
@@ -185,7 +185,7 @@
       padding: 32px 16px;
 
       .content-unavailable-icon,
-      .weflow-page-empty-icon {
+      .app-page-empty-icon {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -199,12 +199,12 @@
         }
 
         &.spin {
-          animation: weflow-spin 1s linear infinite;
+          animation: app-spin 1s linear infinite;
         }
       }
 
       .content-unavailable-title,
-      .weflow-page-empty-text {
+      .app-page-empty-text {
         font-size: 16px;
         font-weight: 600;
         line-height: 1.4;
@@ -229,7 +229,7 @@
     }
   }
 
-  .weflow-page-footer,
+  .app-page-footer,
   .safe-area-bottom-inset {
     flex-shrink: 0;
     padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -245,12 +245,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .weflow-page-container .content-unavailable-icon.spin {
+  .app-page-container .content-unavailable-icon.spin {
     animation-duration: 2s;
   }
 }
 
-@keyframes weflow-spin {
+@keyframes app-spin {
   from {
     transform: rotate(0deg);
   }

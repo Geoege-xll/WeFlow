@@ -9,7 +9,7 @@ import type { Message } from './chatService'
  * 忠实拷贝，去掉了对 `this` / configService / wcdbService / 原生层的依赖，唯一外部输入是
  * 调用方传入的 `myWxid`。目的是让这套 CPU 密集（hex/zstd 解压、字符清洗、key 构造）的解码
  * 映射可以脱离主进程，运行在 worker 线程（见 apiMessageWorker.ts / apiMessageMapperPool.ts），
- * 从而既不卡住 WeFlow 本体，又能多线程并行提速。
+ * 从而既不卡住 OmniMindWeChat 本体，又能多线程并行提速。
  *
  * 重要：这里的逻辑必须与 chatService 中对应的私有方法保持一致。两边都是「逐行独立、无跨行状态」
  * 的纯映射，因此分片/并行处理与一次性处理输出完全一致。若将来修改了 chatService 的任何解码/

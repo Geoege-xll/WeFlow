@@ -1,7 +1,7 @@
 import React from 'react'
-import './WeFlowCard.scss'
+import './AppCard.scss'
 
-export interface WeFlowCardProps {
+export interface AppCardProps {
   id?: string
   children?: React.ReactNode
   className?: string
@@ -15,7 +15,7 @@ export interface WeFlowCardProps {
   footer?: React.ReactNode
 }
 
-export const WeFlowCard: React.FC<WeFlowCardProps> = ({
+export const AppCard: React.FC<AppCardProps> = ({
   id,
   children,
   className = '',
@@ -33,25 +33,25 @@ export const WeFlowCard: React.FC<WeFlowCardProps> = ({
   return (
     <div
       id={id}
-      className={`weflow-card ${hoverElastic ? 'hover-elastic' : ''} ${onClick ? 'interactive' : ''} ${className}`}
+      className={`app-card ${hoverElastic ? 'hover-elastic' : ''} ${onClick ? 'interactive' : ''} ${className}`}
       style={style}
       onClick={onClick}
     >
       {hasHeader && (
-        <div className="weflow-card-header">
+        <div className="app-card-header">
           {header || (
-            <div className="weflow-card-header-titles">
-              {title && <h3 className="weflow-card-title">{title}</h3>}
-              {subtitle && <p className="weflow-card-subtitle">{subtitle}</p>}
+            <div className="app-card-header-titles">
+              {title && <h3 className="app-card-title">{title}</h3>}
+              {subtitle && <p className="app-card-subtitle">{subtitle}</p>}
             </div>
           )}
-          {extra && <div className="weflow-card-extra">{extra}</div>}
+          {extra && <div className="app-card-extra">{extra}</div>}
         </div>
       )}
-      {children && <div className="weflow-card-body">{children}</div>}
-      {footer && <div className="weflow-card-footer">{footer}</div>}
+      {children && <div className="app-card-body">{children}</div>}
+      {footer && <div className="app-card-footer">{footer}</div>}
     </div>
   )
 }
 
-export default WeFlowCard
+export default AppCard

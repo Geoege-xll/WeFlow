@@ -217,6 +217,8 @@ export class WcdbCore {
       }
 
       // 从数据服务获取动态管道名（含 PID）
+      // `weflow_monitor` 由随包分发的原生 WCDB 运行时写死，是第三方二进制 ABI，
+      // 并非产品名或用户数据身份；在替换原生运行时之前不得单方面改名。
       let pipePath = '\\\\.\\pipe\\weflow_monitor'
       if (this.wcdbGetMonitorPipeName) {
         try {
@@ -420,6 +422,7 @@ export class WcdbCore {
     if (this.userDataPath) candidates.push(join(this.userDataPath, 'logs', 'wcdb.log'))
     if (process.env.WCDB_LOG_DIR) candidates.push(join(process.env.WCDB_LOG_DIR, 'logs', 'wcdb.log'))
     candidates.push(join(process.cwd(), 'logs', 'wcdb.log'))
+    // 日志文件名与上述原生监控 ABI 配套，由二进制侧创建，保留历史名称只用于诊断读取。
     candidates.push(join(tmpdir(), 'weflow-wcdb.log'))
     return Array.from(new Set(candidates))
   }

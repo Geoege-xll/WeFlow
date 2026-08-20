@@ -1,28 +1,11 @@
-import React from 'react'
-import { WeFlowCard } from '../components/common'
+import { AppPageContainer } from '../components/common'
+import { HomeWorkbench } from '../features/home/HomeWorkbench'
 import './HomePage.scss'
 
 function HomePage() {
-  return (
-    <div className="home-page">
-      <div className="home-glow animate-breath"></div>
-      <div className="home-content">
-        <WeFlowCard className="home-card" hoverElastic>
-          <div className="brand-letters">
-            {['w', 'e', 'f', 'l', 'o', 'w'].map((char, index) => (
-              <span key={index} className="letter">
-                <span className="letter-bg">{char}</span>
-                <span className="letter-fill-wrapper" style={{ width: '100%' }}>
-                  <span className="letter-fill-content">{char}</span>
-                </span>
-              </span>
-            ))}
-          </div>
-          <p className="home-subtitle">每一条消息的背后，都藏着一段温暖的时光</p>
-        </WeFlowCard>
-      </div>
-    </div>
-  )
+  // 首页直接复用统一详情容器的 fixed body，不注册顶部标题或说明；三区工作台由容器
+  // 提供完整可用高度，页面自身不再创建 max-width、hero 或纵向滚动 shell。
+  return <AppPageContainer className="home-page" scrollable={false}><HomeWorkbench /></AppPageContainer>
 }
 
 export default HomePage

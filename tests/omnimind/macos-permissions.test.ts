@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { MacOsPermissionService, SYSTEM_EVENTS_PERMISSION_PROBE_SCRIPT } from '../../electron/omnimind/macos-permission-service'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/weflow-permissions-test' },
+  app: { getPath: () => '/tmp/omnimind-wechat-permissions-test' },
   clipboard: { readText: () => '', writeText: vi.fn() },
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (value: string) => Buffer.from(value), decryptString: (value: Buffer) => value.toString() },
   shell: { openExternal: vi.fn() },
@@ -81,6 +81,22 @@ describe('macOS OmniMind permission authority', () => {
     await expect(service.authorizeAction()).resolves.toEqual({ success: false, error: 'automation_permission_denied' })
     expect(probeSystemEvents).toHaveBeenCalledTimes(2)
     expect(service.getCached().automation).toBe('denied')
+  })
+
+  it('keeps Accessibility and Automation probe exceptions unknown instead of forging a denial', async () => {
+    const accessibilityUnknown = makeService({
+      isTrustedAccessibilityClient: vi.fn(() => { throw new Error('opaque accessibility probe failure') })
+    })
+    await expect(accessibilityUnknown.service.authorizeAction()).resolves.toEqual({ success: false, error: 'permission_status_unknown' })
+    expect(accessibilityUnknown.service.getCached().accessibility).toBe('unknown')
+    expect(accessibilityUnknown.dependencies.probeSystemEvents).not.toHaveBeenCalled()
+
+    const automationUnknown = makeService({
+      isTrustedAccessibilityClient: vi.fn(() => true),
+      probeSystemEvents: vi.fn(async () => { throw new Error('opaque automation probe failure') })
+    })
+    await expect(automationUnknown.service.authorizeAction()).resolves.toEqual({ success: false, error: 'permission_status_unknown' })
+    expect(automationUnknown.service.getCached().automation).toBe('unknown')
   })
 
   it('rechecks Accessibility without an Automation probe and rechecks Automation with one probe', async () => {
@@ -163,6 +179,65 @@ describe('macOS OmniMind permission authority', () => {
       success: false,
       error: 'accessibility_permission_denied'
     })
+    expect(internals.sender.sendManual).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Accessibility', () => makeService({ isTrustedAccessibilityClient: vi.fn(() => { throw new Error('opaque accessibility failure') }) }).service],
+    ['Automation', () => makeService({
+      isTrustedAccessibilityClient: vi.fn(() => true),
+      probeSystemEvents: vi.fn(async () => { throw new Error('opaque automation failure') })
+    }).service]
+  ])('%s probe unknown blocks the action without degrading a running runtime', async (_kind, createAuthority) => {
+    const { OmniMindService } = await import('../../electron/omnimind/omnimind-service')
+    const service = new OmniMindService(createAuthority())
+    const internals = service as unknown as {
+      runtime: {
+        dependencies: { validateStart: () => Promise<{ success: true; accountId: string }> }
+        enable: () => Promise<void>
+        getState: () => string
+      }
+      sender: { sendManual: ReturnType<typeof vi.fn> }
+    }
+    // 直接建立已运行状态，只验证 send-time 权限复核对 runtime 真值的影响。
+    internals.runtime.dependencies.validateStart = async () => ({ success: true, accountId: 'account-a' })
+    await internals.runtime.enable()
+    internals.sender.sendManual = vi.fn()
+
+    await expect(service.sendManual({ sessionId: 'private-session', text: 'private reply' })).resolves.toEqual({
+      success: false,
+      error: 'permission_status_unknown'
+    })
+    expect(internals.runtime.getState()).toBe('running')
+    expect(internals.sender.sendManual).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Accessibility', 'accessibility_permission_denied', () => makeService({ isTrustedAccessibilityClient: vi.fn(() => false) }).service],
+    ['Automation', 'automation_permission_denied', () => makeService({
+      isTrustedAccessibilityClient: vi.fn(() => true),
+      probeSystemEvents: vi.fn(async () => { throw Object.assign(new Error('revoked'), { code: -1743 }) })
+    }).service]
+  ])('%s explicit denial still blocks and degrades a running runtime', async (_kind, expectedError, createAuthority) => {
+    const { OmniMindService } = await import('../../electron/omnimind/omnimind-service')
+    const service = new OmniMindService(createAuthority())
+    const internals = service as unknown as {
+      runtime: {
+        dependencies: { validateStart: () => Promise<{ success: true; accountId: string }> }
+        enable: () => Promise<void>
+        getState: () => string
+      }
+      sender: { sendManual: ReturnType<typeof vi.fn> }
+    }
+    internals.runtime.dependencies.validateStart = async () => ({ success: true, accountId: 'account-a' })
+    await internals.runtime.enable()
+    internals.sender.sendManual = vi.fn()
+
+    await expect(service.sendManual({ sessionId: 'private-session', text: 'private reply' })).resolves.toEqual({
+      success: false,
+      error: expectedError
+    })
+    expect(internals.runtime.getState()).toBe('degraded')
     expect(internals.sender.sendManual).not.toHaveBeenCalled()
   })
 

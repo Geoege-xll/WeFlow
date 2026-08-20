@@ -13,7 +13,7 @@ interface WorkerConfig {
 }
 
 const config = workerData as WorkerConfig
-process.env.WEFLOW_WORKER = '1'
+process.env.OMNIMIND_WECHAT_WORKER = '1'
 if (config.resourcesPath) {
   process.env.WCDB_RESOURCES_PATH = config.resourcesPath
 }

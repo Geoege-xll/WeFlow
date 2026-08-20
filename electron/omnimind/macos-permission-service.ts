@@ -27,6 +27,11 @@ export const isAutomationPermissionDeniedError = (error: unknown): boolean => {
   return /(?:^|\D)-1743(?:\D|$)/.test(evidence) || /not authori[sz]ed to send apple events/.test(evidence)
 }
 
+export type MacOsAuthorizationFailure = {
+  success: false
+  error: 'accessibility_permission_denied' | 'automation_permission_denied' | 'permission_status_unknown'
+}
+
 export class MacOsPermissionService {
   private snapshot: OmniMindPermissionSnapshot
   private readonly listeners = new Set<(snapshot: OmniMindPermissionSnapshot) => void>()
@@ -83,11 +88,15 @@ export class MacOsPermissionService {
     return this.probeAutomation()
   }
 
-  async authorizeAction(): Promise<{ success: false; error: 'accessibility_permission_denied' | 'automation_permission_denied' } | undefined> {
+  async authorizeAction(): Promise<MacOsAuthorizationFailure | undefined> {
     const passive = await this.refreshPassive()
-    if (passive.accessibility !== 'granted') return { success: false, error: 'accessibility_permission_denied' }
+    // isTrustedAccessibilityClient(false) 返回 false 是明确拒绝；调用抛异常时只能记为 unknown。
+    // unknown/not_requested/unsupported 都必须 fail closed，但不得伪造成用户已拒绝。
+    if (passive.accessibility === 'denied') return { success: false, error: 'accessibility_permission_denied' }
+    if (passive.accessibility !== 'granted') return { success: false, error: 'permission_status_unknown' }
     const revalidated = await this.probeAutomation()
-    if (revalidated.automation !== 'granted') return { success: false, error: 'automation_permission_denied' }
+    if (revalidated.automation === 'denied') return { success: false, error: 'automation_permission_denied' }
+    if (revalidated.automation !== 'granted') return { success: false, error: 'permission_status_unknown' }
     return undefined
   }
 

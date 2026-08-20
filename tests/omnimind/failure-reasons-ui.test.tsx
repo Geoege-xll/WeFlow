@@ -15,10 +15,11 @@ import {
   subscribeManualComposerState,
   updateManualComposerState
 } from '../../src/features/omnimind/manualComposerStore'
+import { OMNIMIND_OPEN_SETTINGS_EVENT, requestOmniMindSettings, type OmniMindOpenSettingsDetail } from '../../src/features/omnimind/recoveryActions'
 
 afterEach(() => { cleanup(); resetManualComposerStoreForTests() })
 
-const taskFor = (failureStage: OmniMindFailureStage, reason: string, status: 'send_failed' | 'delivery_unconfirmed' = 'send_failed') => {
+const taskFor = (failureStage: OmniMindFailureStage, reason: string, status: 'generation_failed' | 'send_failed' | 'delivery_unconfirmed' = 'send_failed') => {
   const snapshot: OmniMindSnapshot = {
     runtimeState: 'running',
     waiting: [],
@@ -40,18 +41,21 @@ const taskFor = (failureStage: OmniMindFailureStage, reason: string, status: 'se
 
 const renderTask = (task: ReturnType<typeof taskFor>) => {
   const onRetry = vi.fn()
+  const onSend = vi.fn()
+  const onConfirmDelivery = vi.fn()
   const onInspectConversation = vi.fn<(sessionId: string) => void>()
   const onOpenHostingSettings = vi.fn()
   const { container } = render(<OmniMindQueueTaskItem
     task={task}
     onCancel={vi.fn()}
     onRetry={onRetry}
-    onSend={vi.fn()}
+    onSend={onSend}
     onAbandon={vi.fn()}
+    onConfirmDelivery={onConfirmDelivery}
     onInspectConversation={onInspectConversation}
     onOpenHostingSettings={onOpenHostingSettings}
   />)
-  return { container, onRetry, onInspectConversation, onOpenHostingSettings }
+  return { container, onRetry, onSend, onConfirmDelivery, onInspectConversation, onOpenHostingSettings }
 }
 
 const deferred = <T,>() => {
@@ -82,13 +86,48 @@ const AccountReadinessHarness = ({ readAccountId }: { readAccountId: () => Promi
 
 describe('OmniMind privacy-safe failure reasons', () => {
   it.each([
-    ['verification_baseline', 'verification_baseline_failed', '无法读取发送前的微信消息记录。尚未执行微信发送。', '确认 WeFlow 能读取当前会话后，再重新检查。'],
-    ['automation', 'accessibility_permission_denied', 'WeFlow 没有控制微信所需的辅助功能权限。尚未发送。', '打开权限中心的辅助功能卡片，并按提示恢复。'],
-    ['automation', 'automation_permission_denied', 'WeFlow 没有控制微信界面所需的自动化权限。尚未发送。', '打开权限中心的自动化卡片，并按提示恢复。'],
-    ['authorization', 'automation_permission_denied', 'WeFlow 没有控制微信界面所需的自动化权限。尚未发送。', '打开权限中心的自动化卡片，并按提示恢复。'],
+    ['timeout', 'Python 服务端未在生成时限内返回，但请求可能已经执行。'],
+    ['auth', 'Python 服务端拒绝了当前 API Key。'],
+    ['network', 'OmniMindWeChat 无法从 Python 服务端取得有效回复。'],
+    ['malformed', 'Python 服务端返回了 OmniMindWeChat 无法解析的结果。'],
+    ['empty', 'Python 服务端已返回，但没有可发送的文本。'],
+    ['handoff', 'Python 服务端已判定本次对话不应自动回复。'],
+    ['generation_exception', 'OmniMindWeChat 调用 Python 生成服务时发生内部异常。']
+  ] as const)('maps generation %s to a detailed privacy-safe fact', (reason, fact) => {
+    const { container } = renderTask(taskFor('generation', reason, 'generation_failed'))
+    expect(screen.getByText(fact)).toBeTruthy()
+    expect(container.textContent).not.toContain(reason)
+    cleanup()
+  })
+
+  it('marks generation timeout uncertain and renders no retry action', () => {
+    const task = taskFor('generation', 'timeout', 'generation_failed')
+    expect(task.failure).toMatchObject({ canRetry: false, uncertain: true })
+    const { onRetry } = renderTask(task)
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+    expect(screen.getByText(/不要直接重试/)).toBeTruthy()
+    expect(onRetry).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['verification_baseline', 'verification_baseline_failed', '无法读取发送前的微信消息记录。尚未执行微信发送。', '确认 OmniMindWeChat 能读取当前会话后，再重新检查。'],
+    ['automation', 'accessibility_permission_denied', 'OmniMindWeChat 没有控制微信所需的辅助功能权限。尚未发送。', '打开权限中心的辅助功能卡片，并按提示恢复。'],
+    ['automation', 'automation_permission_denied', 'OmniMindWeChat 没有控制微信界面所需的自动化权限。尚未发送。', '打开权限中心的自动化卡片，并按提示恢复。'],
+    ['authorization', 'automation_permission_denied', 'OmniMindWeChat 没有控制微信界面所需的自动化权限。尚未发送。', '打开权限中心的自动化卡片，并按提示恢复。'],
     ['automation', 'target_ambiguous', '找到多个匹配会话，无法安全确定发送目标。尚未发送。', '在微信中只保留并打开正确会话，再重试。'],
     ['automation', 'target_mismatch', '当前微信会话与任务目标不一致。尚未发送。', '切换到正确会话并确认标题后，再重试。'],
+    ['automation', 'wechat_process_unavailable', '当前未找到微信进程，尚未发送。', '请打开微信并保持桌面版窗口可见，再重试。'],
+    ['automation', 'wechat_window_unavailable', '微信当前没有可操作窗口，尚未发送。', '请打开并解锁微信主窗口，再重试。'],
+    ['automation', 'search_open_failed', '无法打开微信搜索界面，尚未发送。', '请确认微信主窗口处于前台，再重试。'],
+    ['automation', 'search_field_unavailable', '无法定位可用的微信搜索框，尚未发送。', '请确认微信主窗口已显示搜索框，再重试。'],
+    ['automation', 'search_field_ambiguous', '找到多个微信搜索框，无法安全确定操作目标。尚未发送。', '请关闭多余微信窗口并恢复标准布局，再重试。'],
+    ['automation', 'search_input_failed', '微信搜索框无法接收会话标题，尚未发送。', '请手动点击搜索框并确认可输入，再重试。'],
+    ['automation', 'search_result_click_failed', '找到目标会话但点击打开失败，尚未发送。', '请在微信中手动打开目标会话并保持前台，再重试。'],
     ['automation', 'input_unavailable', '无法定位可用的微信输入框。尚未发送。', '确认微信窗口已解锁且会话输入区可用。'],
+    ['automation', 'input_ambiguous', '无法定位可用的微信输入框。尚未发送。', '确认微信窗口已解锁且会话输入区可用。'],
+    ['automation', 'input_click_failed', '已找到微信输入框，但点击聚焦失败。尚未发送。', '请点击微信输入框确认可输入后，再重试。'],
+    ['automation', 'input_paste_failed', '无法将回复粘贴到微信输入框，尚未发送。', '请确认微信输入框可编辑且剪贴板可用，再重试。'],
+    ['automation', 'input_submit_failed', '微信输入框未能提交消息，尚未发送。', '请确认输入框仍处于会话中，再检查后决定是否重试。'],
     ['automation', 'automation_timeout', '自动化操作超时，发送结果无法确认。', '请先检查微信会话；不要直接重试，以免重复发送。'],
     ['verification_postsend', 'outbound_not_verified', '发送动作可能已执行，但消息记录尚未确认。', '请先检查微信会话；确认未发送后再决定是否重发。'],
     ['verification_postsend', 'verification_unbounded', '发送动作可能已执行，但消息记录尚未确认。', '请先检查微信会话；确认未发送后再决定是否重发。']
@@ -98,6 +137,20 @@ describe('OmniMind privacy-safe failure reasons', () => {
     expect(screen.getByText(nextStep)).toBeTruthy()
     expect(screen.queryByText(reason)).toBeNull()
     cleanup()
+  })
+
+  it('offers confirmation only for delivery-unconfirmed and never routes it through retry or send', async () => {
+    const uncertain = renderTask(taskFor('verification_postsend', 'outbound_not_verified', 'delivery_unconfirmed'))
+    fireEvent.click(screen.getByRole('button', { name: '打开会话检查' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认送达' }))
+    await waitFor(() => expect(uncertain.onConfirmDelivery).toHaveBeenCalledWith('task-outbound_not_verified'))
+    expect(uncertain.onInspectConversation).toHaveBeenCalledWith('private-session')
+    expect(uncertain.onRetry).not.toHaveBeenCalled()
+    expect(uncertain.onSend).not.toHaveBeenCalled()
+    cleanup()
+
+    renderTask(taskFor('automation', 'input_submit_failed', 'send_failed'))
+    expect(screen.queryByRole('button', { name: '确认送达' })).toBeNull()
   })
 
   it('keeps known failures out of the generic send-failed fallback and allows only explicit pre-send retry', () => {
@@ -476,14 +529,12 @@ describe('OmniMind privacy-safe failure reasons', () => {
   it('navigates an off-screen queue task to its own session without sending or retrying', async () => {
     const now = Date.now()
     const settings = {
-      schemaVersion: 2 as const,
+      schemaVersion: 4 as const,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'private-session', displayName: 'Visible' }] },
       autoSend: true,
-      ignoreOfficial: true,
       hasApiKey: true,
-      batchWindowMs: 2000,
-      requestTimeoutMs: 15000
+      batchWindowMs: 2000
     }
     const inspectionTarget = document.createElement('main')
     inspectionTarget.id = 'chat-message-area'
@@ -561,31 +612,23 @@ describe('OmniMind privacy-safe failure reasons', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 
-  it('restores a custom recovery opener after closing hosting settings', async () => {
-    const settings = {
-      schemaVersion: 2 as const, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
-      managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'session-a', displayName: 'A' }] },
-      autoSend: true, ignoreOfficial: true, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000
-    }
-    const sendManual = vi.fn().mockResolvedValue({ success: false, stage: 'automation', error: 'private raw failure' })
-    Object.defineProperty(window, 'electronAPI', { configurable: true, value: { omniMind: {
-      sendManual, getSnapshot: async () => ({ runtimeState: 'running', waiting: [], recent: [] }), getSettings: async () => settings,
-      onSnapshotChanged: () => () => undefined, enable: vi.fn(), disable: vi.fn(), saveSettings: vi.fn(), cancelTask: vi.fn(), retryTask: vi.fn(), sendGeneratedReply: vi.fn(), abandonGeneratedReply: vi.fn()
-    } } })
-    render(<><OmniMindManualMessageComposer accountId="account-a" sessionId="custom-opener-session" /><OmniMindQueuePanel /></>)
-    fireEvent.change(screen.getByLabelText('手动发送文本'), { target: { value: 'draft' } })
-    fireEvent.click(screen.getByRole('button', { name: '发送' }))
-    const opener = await screen.findByRole('button', { name: '检查托管状态' })
-    fireEvent.click(opener)
-    fireEvent.click(await screen.findByRole('button', { name: '关闭设置' }))
-    await waitFor(() => expect(document.activeElement).toBe(opener))
+  it('preserves the exact opener and permission kind for the shared permission center', () => {
+    const opener = document.createElement('button')
+    let received: OmniMindOpenSettingsDetail | undefined
+    const listener = (event: Event): void => { received = (event as CustomEvent<OmniMindOpenSettingsDetail>).detail }
+    window.addEventListener(OMNIMIND_OPEN_SETTINGS_EVENT, listener)
+
+    requestOmniMindSettings(opener, 'automation')
+
+    expect(received).toEqual({ opener, tab: 'permissions', permissionKind: 'automation' })
+    window.removeEventListener(OMNIMIND_OPEN_SETTINGS_EVENT, listener)
   })
 
   it.each(['degraded', 'failed'] as const)('restores the %s runtime settings opener after close', async (runtimeState) => {
     const settings = {
-      schemaVersion: 2 as const, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      schemaVersion: 4 as const, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'session-a', displayName: 'A' }] },
-      autoSend: true, ignoreOfficial: true, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000
+      autoSend: true, hasApiKey: true, batchWindowMs: 2000
     }
     Object.defineProperty(window, 'electronAPI', { configurable: true, value: { omniMind: {
       getSnapshot: async () => ({ runtimeState, waiting: [], recent: [] }), getSettings: async () => settings,

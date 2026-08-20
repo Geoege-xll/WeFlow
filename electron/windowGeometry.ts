@@ -1,7 +1,7 @@
-export const NORMAL_WINDOW_WIDTH = 1280
-export const NORMAL_WINDOW_HEIGHT = 800
-export const NORMAL_MIN_WIDTH = 1100
-export const NORMAL_MIN_HEIGHT = 700
+export const NORMAL_WINDOW_WIDTH = 1080
+export const NORMAL_WINDOW_HEIGHT = 680
+export const NORMAL_MIN_WIDTH = 1080
+export const NORMAL_MIN_HEIGHT = 680
 
 export interface WorkArea {
   x: number

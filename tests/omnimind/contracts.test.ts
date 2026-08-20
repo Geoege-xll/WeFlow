@@ -29,10 +29,10 @@ describe('OmniMind contracts smoke', () => {
     expect(() => parseManualSendPayload({ accountId: 'a', sessionId: 's', text: 'hello' })).toThrow()
     expect(() => parseManualSendPayload({ sessionId: 's', text: '   ' })).toThrow()
     expect(() => parseCancelTaskPayload({ taskId: 'x', extra: true })).toThrow()
-    expect(parseSettingsPayload({ schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000', apiKeyDraft: 'secret', managedScope: { mode: 'selected', conversations: [{ sessionId: 'a', displayName: 'A' }] }, autoSend: true, ignoreOfficial: true, batchWindowMs: 2500, requestTimeoutMs: 12000 })).toEqual({
-      schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', apiKeyDraft: 'secret', managedScope: { mode: 'selected', conversations: [{ sessionId: 'a', displayName: 'A' }] }, autoSend: true, ignoreOfficial: true, batchWindowMs: 2500, requestTimeoutMs: 12000
+    expect(parseSettingsPayload({ schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000', apiKeyDraft: 'secret', managedScope: { mode: 'selected', conversations: [{ sessionId: 'a', displayName: 'A' }] }, autoSend: true, batchWindowMs: 2500 })).toEqual({
+      schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', apiKeyDraft: 'secret', managedScope: { mode: 'selected', conversations: [{ sessionId: 'a', displayName: 'A' }] }, autoSend: true, batchWindowMs: 2500
     })
-    const base = { schemaVersion: 2, managedScope: { mode: 'all', confirmedAt: 1 }, autoSend: true, ignoreOfficial: true }
+    const base = { schemaVersion: 4, managedScope: { mode: 'all', confirmedAt: 1 }, autoSend: true }
     expect(() => parseSettingsPayload({ ...base, pythonBaseUrl: 'http://remote.test' })).toThrow()
     expect(() => parseSettingsPayload({ ...base, pythonBaseUrl: 'http://user:pass@127.0.0.1:8000' })).toThrow()
     expect(() => parseSettingsPayload({ ...base, pythonBaseUrl: 'http://127.0.0.1:8000', batchWindowMs: 20 })).toThrow()
@@ -69,16 +69,16 @@ describe('OmniMind contracts smoke', () => {
     expect(() => parseAccountConfigPatch({ imageAesKey: '', extra: true })).toThrow('Invalid account patch')
   })
 
-  it('classifies batch and timeout as general settings while endpoint, key, scope and policy are critical', () => {
-    const current = { schemaVersion: 2 as const, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, ignoreOfficial: true, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000 }
-    expect(isCriticalSettingsChange(current, { ...current, batchWindowMs: 2500, requestTimeoutMs: 30000 })).toBe(false)
+  it('classifies the aggregation window as general while endpoint, key and scope are critical', () => {
+    const current = { schemaVersion: 4 as const, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, hasApiKey: true, batchWindowMs: 2000 }
+    expect(isCriticalSettingsChange(current, { ...current, batchWindowMs: 2500 })).toBe(false)
     expect(isCriticalSettingsChange(current, { ...current, pythonBaseUrl: 'http://localhost:8000/api/v1/open' })).toBe(true)
     expect(isCriticalSettingsChange(current, { ...current, apiKeyDraft: 'replacement' })).toBe(true)
     expect(isCriticalSettingsChange(current, { ...current, managedScope: { mode: 'selected', conversations: [{ sessionId: 'other', displayName: 'Other' }] } })).toBe(true)
   })
 })
 
-describe('OmniMind v2 hosting settings contract', () => {
+describe('OmniMind v4 hosting settings contract', () => {
   it('normalizes loopback HTTP and remote HTTPS to one open API root', () => {
     expect(normalizeOmniMindBaseUrl('http://localhost:8000/')).toBe('http://localhost:8000/api/v1/open')
     expect(normalizeOmniMindBaseUrl('https://api.example.com/api/v1/open/')).toBe('https://api.example.com/api/v1/open')
@@ -98,15 +98,18 @@ describe('OmniMind v2 hosting settings contract', () => {
     expect(() => parseManagedScope({ mode: 'all' })).toThrow()
   })
 
-  it('strictly parses v2 settings and preserves false booleans', () => {
-    expect(parseSettingsPayload({
-      schemaVersion: 2,
+  it('strictly parses v4 settings and rejects removed policy and timeout fields', () => {
+    const settings = {
+      schemaVersion: 4,
       pythonBaseUrl: 'https://api.example.com',
       managedScope: { mode: 'all', confirmedAt: 123 },
       autoSend: false,
-      ignoreOfficial: false,
-      batchWindowMs: 2000,
-      requestTimeoutMs: 15000
-    })).toMatchObject({ schemaVersion: 2, pythonBaseUrl: 'https://api.example.com/api/v1/open', autoSend: false, ignoreOfficial: false })
+      batchWindowMs: 2000
+    }
+    expect(parseSettingsPayload(settings)).toMatchObject({ schemaVersion: 4, pythonBaseUrl: 'https://api.example.com/api/v1/open', autoSend: false })
+    // 已移除字段不能成为 Renderer 可控的兼容旁路。
+    expect(() => parseSettingsPayload({ ...settings, ignoreOfficial: true })).toThrow('Invalid settings payload')
+    expect(() => parseSettingsPayload({ ...settings, ignoreOfficial: false })).toThrow('Invalid settings payload')
+    expect(() => parseSettingsPayload({ ...settings, requestTimeoutMs: 15_000 })).toThrow('Invalid settings payload')
   })
 })

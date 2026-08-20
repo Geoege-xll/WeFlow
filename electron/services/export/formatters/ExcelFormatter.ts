@@ -104,7 +104,7 @@ export class ExcelFormatter {
 
       // 创建 Excel 工作簿
       const workbook = new ExcelJS.Workbook()
-      workbook.creator = 'WeFlow'
+      workbook.creator = 'OmniMindWeChat'
       workbook.created = new Date()
 
       const worksheet = workbook.addWorksheet('聊天记录')

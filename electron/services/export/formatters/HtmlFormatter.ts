@@ -287,7 +287,7 @@ export class HtmlFormatter {
 
     <!-- Data Injection -->
     <script>
-      window.WEFLOW_DATA = [
+      window.OMNIMIND_WECHAT_DATA = [
 `);
 
       // Pre-build avatar HTML lookup to avoid per-message rebuilds
@@ -486,7 +486,7 @@ export class HtmlFormatter {
       let imageZoom = 1
 
       // Initial Data
-      let allData = window.WEFLOW_DATA || [];
+      let allData = window.OMNIMIND_WECHAT_DATA || [];
       let currentList = allData;
 
       // Render Item Function

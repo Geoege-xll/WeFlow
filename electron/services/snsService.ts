@@ -9,6 +9,7 @@ import crypto from 'crypto'
 import { WasmService } from './wasmService'
 import zlib from 'zlib'
 import { escapeMarkdownLinkText, escapeMarkdownText, toMarkdownUrl } from './export/utils/markdown'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 export interface SnsLivePhoto {
     url: string
@@ -890,7 +891,7 @@ class SnsService {
 
     private getSnsCacheDir(): string {
         const configuredCachePath = String(this.configService.get('cachePath') || '').trim()
-        const baseDir = configuredCachePath || join(app.getPath('documents'), 'WeFlow')
+        const baseDir = configuredCachePath || join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
         const snsCacheDir = join(baseDir, 'sns_cache')
         if (!existsSync(snsCacheDir)) {
             mkdirSync(snsCacheDir, { recursive: true })
@@ -900,7 +901,7 @@ class SnsService {
 
     private getEmojiCacheDir(): string {
         const configuredCachePath = String(this.configService.get('cachePath') || '').trim()
-        const baseDir = configuredCachePath || join(app.getPath('documents'), 'WeFlow')
+        const baseDir = configuredCachePath || join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
         const emojiDir = join(baseDir, 'Emojis')
         if (!existsSync(emojiDir)) {
             mkdirSync(emojiDir, { recursive: true })
@@ -1845,7 +1846,7 @@ class SnsService {
         if (filters.keyword) lines.push(`- 筛选关键词: ${escapeMarkdownText(filters.keyword)}`)
         if (filters.usernames && filters.usernames.length > 0) lines.push(`- 筛选用户: ${filters.usernames.length} 人`)
         lines.push(`- 导出时间: ${new Date().toLocaleString('zh-CN')}`)
-        lines.push('- 导出工具: WeFlow')
+        lines.push('- 导出工具: OmniMindWeChat')
 
         for (const post of posts) {
             lines.push('')
@@ -2079,7 +2080,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 <div class="container">
     <div class="feed-hd"><h2>朋友圈</h2><span class="info">共 ${posts.length} 条${filterInfo ? ` · ${filterInfo}` : ''}</span></div>
     ${postsHtml}
-    <div class="ft">由 WeFlow 导出 · ${new Date().toLocaleString('zh-CN')}</div>
+    <div class="ft">由 OmniMindWeChat 导出 · ${new Date().toLocaleString('zh-CN')}</div>
 </div>
 <div class="lb" id="lb" onclick="closeLb()"><img id="lbi" src=""></div>
 <button class="btt" id="btt" onclick="scrollTo({top:0,behavior:'smooth'})">↑</button>

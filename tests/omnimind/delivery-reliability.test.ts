@@ -3,12 +3,12 @@ import { spawnSync } from 'child_process'
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
-import { buildOsascriptArguments, FOCUS_RESTORE_SCRIPT, MacOsWeChatTextAdapter, SEND_SCRIPT, WcdbOutboundVerifier } from '../../electron/omnimind/macos-wechat-text-adapter'
+import { buildOsascriptArguments, FOCUS_CAPTURE_SCRIPT, FOCUS_RESTORE_SCRIPT, MacOsWeChatTextAdapter, PREPARE_WECHAT_WINDOW_SCRIPT, SEND_SCRIPT, WcdbOutboundVerifier } from '../../electron/omnimind/macos-wechat-text-adapter'
 import { UnifiedSender } from '../../electron/omnimind/unified-sender'
 
 describe('OmniMind delivery reliability', () => {
   it('targets only System Events for send and focus restore while keeping dynamic values in argv', () => {
-    for (const script of [SEND_SCRIPT, FOCUS_RESTORE_SCRIPT]) {
+    for (const script of [PREPARE_WECHAT_WINDOW_SCRIPT, SEND_SCRIPT, FOCUS_CAPTURE_SCRIPT, FOCUS_RESTORE_SCRIPT]) {
       expect(script.match(/tell application\s+/gi)).toEqual(['tell application '])
       expect(script).toContain('tell application "System Events"')
       expect(script).not.toMatch(/tell application "WeChat"|tell application \(|expectedTitle\s*&|replyText\s*&/i)
@@ -17,8 +17,16 @@ describe('OmniMind delivery reliability', () => {
     expect(buildOsascriptArguments(SEND_SCRIPT, ['title"\nmalicious', 'reply'])).toEqual(['-e', SEND_SCRIPT, '--', 'title"\nmalicious', 'reply'])
   })
 
+  it('窗口就绪阶段先于搜索、剪贴板写入、目标点击和回车', () => {
+    expect(PREPARE_WECHAT_WINDOW_SCRIPT).toContain('tell process "Dock"')
+    expect(PREPARE_WECHAT_WINDOW_SCRIPT).not.toMatch(/keystroke|set the clipboard|expectedTitle|replyText|key code 36/)
+    for (const marker of ['keystroke "f"', 'set the clipboard to expectedTitle', 'key code 36', 'click at {inputX, inputY}']) {
+      expect(SEND_SCRIPT).toContain(marker)
+    }
+  })
+
   it('rejects a verifier without captureBaseline at the TypeScript boundary', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-required-baseline-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-required-baseline-'))
     try {
       const fixture = path.join(directory, 'missing-baseline.ts')
       const senderModule = path.resolve('electron/omnimind/unified-sender').replaceAll('\\', '\\\\')
@@ -39,8 +47,12 @@ describe('OmniMind delivery reliability', () => {
     }
   })
 
+  // 此边界测试会通过 spawnSync 启动独立 tsc，并加载 contracts、Electron 类型、Hook、
+  // queue、controller、service 与 IPC 的完整类型闭包。全量并发时冷启动可能稳定超过
+  // Vitest 默认 5 秒，因此只为这一条重型编译测试保留 15 秒预算；不修改全局 timeout，
+  // 也不跳过或放宽下面任何类型一致性与隐私边界断言。
   it('keeps IPC and hook send results exactly aligned with the shared stage contract', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-send-result-contract-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-send-result-contract-'))
     try {
       const fixture = path.join(directory, 'send-result-contract.ts')
       const contractsModule = path.resolve('shared/omnimind/contracts').replaceAll('\\', '\\\\')
@@ -117,7 +129,7 @@ describe('OmniMind delivery reliability', () => {
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 
   it('takes the maximum ascending position as baseline and rejects an older same-second same-text row', async () => {
     const getMessages = vi.fn()
@@ -274,7 +286,8 @@ describe('OmniMind delivery reliability', () => {
   })
 
   it('keeps a successful automation result when clipboard and focus restoration fail', async () => {
-    const runAppleScript = vi.fn(async (_script: string, args: string[]) => {
+    const runAppleScript = vi.fn(async (script: string, args: string[]) => {
+      if (script === PREPARE_WECHAT_WINDOW_SCRIPT) return 'wechat-window-ready'
       if (args.length === 0) return 'Finder'
       if (args[0] === 'Finder') throw new Error('raw focus restore failure')
       return 'sent'
@@ -294,7 +307,8 @@ describe('OmniMind delivery reliability', () => {
   })
 
   it.each([
-    ['accessibility', 'accessibility_permission_denied'],
+    // 旧脚本哨兵没有原生 TCC 证据，必须保守归类；明确 -25211 的权限用例见下方。
+    ['accessibility', 'automation_failed'],
     ['ambiguous-target', 'target_ambiguous'],
     ['target-mismatch', 'target_mismatch'],
     ['input-unavailable', 'input_unavailable'],
@@ -303,7 +317,7 @@ describe('OmniMind delivery reliability', () => {
     const adapter = new MacOsWeChatTextAdapter({
       platform: 'darwin',
       clipboard: { readText: () => 'before', writeText: vi.fn() },
-      runAppleScript: vi.fn(async (_script: string, args: string[]) => args.length === 0 ? 'Finder' : scriptResult)
+      runAppleScript: vi.fn(async (script: string, args: string[]) => script === PREPARE_WECHAT_WINDOW_SCRIPT ? 'wechat-window-ready' : args.length === 0 ? 'Finder' : scriptResult)
     })
 
     await expect(adapter.sendText({ accountId: 'a', sessionId: 's', conversationTitle: 'title', text: 'reply' })).resolves.toMatchObject({
@@ -318,7 +332,8 @@ describe('OmniMind delivery reliability', () => {
     const adapter = new MacOsWeChatTextAdapter({
       platform: 'darwin',
       clipboard: { readText: () => 'before', writeText: vi.fn() },
-      runAppleScript: vi.fn(async (_script: string, args: string[]) => {
+      runAppleScript: vi.fn(async (script: string, args: string[]) => {
+        if (script === PREPARE_WECHAT_WINDOW_SCRIPT) return 'wechat-window-ready'
         if (args.length === 0) return 'Finder'
         if (args[0] === 'Finder') return ''
         throw timeout
@@ -346,7 +361,8 @@ describe('OmniMind delivery reliability', () => {
     const adapter = new MacOsWeChatTextAdapter({
       platform: 'darwin',
       clipboard: { readText: () => 'private clipboard', writeText: vi.fn() },
-      runAppleScript: vi.fn(async (_script: string, args: string[]) => {
+      runAppleScript: vi.fn(async (script: string, args: string[]) => {
+        if (script === PREPARE_WECHAT_WINDOW_SCRIPT) return 'wechat-window-ready'
         if (args.length === 0) return 'Finder'
         if (args[0] === 'Finder') return ''
         throw permissionError
@@ -373,7 +389,8 @@ describe('OmniMind delivery reliability', () => {
     const adapter = new MacOsWeChatTextAdapter({
       platform: 'darwin',
       clipboard: { readText: () => 'private clipboard', writeText: vi.fn() },
-      runAppleScript: vi.fn(async (_script: string, args: string[]) => {
+      runAppleScript: vi.fn(async (script: string, args: string[]) => {
+        if (script === PREPARE_WECHAT_WINDOW_SCRIPT) return 'wechat-window-ready'
         if (args.length === 0) return 'Finder'
         throw Object.assign(new Error('private contact and reply'), { stderr: 'private raw stderr', code: 1 })
       })
@@ -385,6 +402,44 @@ describe('OmniMind delivery reliability', () => {
     })
 
     await expect(sender.sendManual({ accountId: 'a', sessionId: 's', conversationTitle: 'contact', text: 'reply' })).resolves.toEqual({
+      success: false, stage: 'verification_postsend', error: 'outbound_not_verified'
+    })
+    expect(verify).toHaveBeenCalledTimes(1)
+  })
+
+  it('verifies an input submit failure because key code 36 may already have taken effect', async () => {
+    const verify = vi.fn(async () => ({ success: true, verifiedMessageKey: 'confirmed' }))
+    const adapter = new MacOsWeChatTextAdapter({
+      platform: 'darwin',
+      clipboard: { readText: () => 'before', writeText: vi.fn() },
+      runAppleScript: vi.fn(async (script: string, args: string[]) => script === PREPARE_WECHAT_WINDOW_SCRIPT ? 'wechat-window-ready' : args.length === 0 ? 'Finder' : 'input-submit-failed'),
+      now: () => 456
+    })
+    const sender = new UnifiedSender({
+      cancelForManualSend: () => [],
+      adapter,
+      verifier: { captureBaseline: async () => undefined, verify }
+    })
+
+    await expect(sender.sendManual({ accountId: 'a', sessionId: 's', conversationTitle: 'title', text: 'reply' })).resolves.toEqual({ success: true })
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 's', sentAt: 456, text: 'reply' }))
+  })
+
+  it('returns delivery uncertainty when input submit failure cannot be verified', async () => {
+    const verify = vi.fn(async () => ({ success: false, error: 'outbound_not_verified' }))
+    const adapter = new MacOsWeChatTextAdapter({
+      platform: 'darwin',
+      clipboard: { readText: () => 'before', writeText: vi.fn() },
+      runAppleScript: vi.fn(async (script: string, args: string[]) => script === PREPARE_WECHAT_WINDOW_SCRIPT ? 'wechat-window-ready' : args.length === 0 ? 'Finder' : 'input-submit-failed'),
+      now: () => 456
+    })
+    const sender = new UnifiedSender({
+      cancelForManualSend: () => [],
+      adapter,
+      verifier: { captureBaseline: async () => undefined, verify }
+    })
+
+    await expect(sender.sendManual({ accountId: 'a', sessionId: 's', conversationTitle: 'title', text: 'reply' })).resolves.toEqual({
       success: false, stage: 'verification_postsend', error: 'outbound_not_verified'
     })
     expect(verify).toHaveBeenCalledTimes(1)

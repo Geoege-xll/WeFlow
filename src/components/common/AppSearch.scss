@@ -1,4 +1,4 @@
-.weflow-search {
+.app-search {
   display: flex;
   align-items: center;
   position: relative;
@@ -20,42 +20,42 @@
     opacity: 0.5;
     cursor: not-allowed;
 
-    .weflow-search-input {
+    .app-search-input {
       cursor: not-allowed;
     }
   }
 
-  &.weflow-search-sm {
+  &.app-search-sm {
     height: 28px;
     padding: 0 8px;
     border-radius: 7px;
 
-    .weflow-search-input {
+    .app-search-input {
       font-size: var(--font-xs, 11px);
     }
   }
 
-  &.weflow-search-md {
+  &.app-search-md {
     height: 34px;
     padding: 0 10px;
     border-radius: 9px;
 
-    .weflow-search-input {
+    .app-search-input {
       font-size: var(--font-sm, 12px);
     }
   }
 
-  &.weflow-search-lg {
+  &.app-search-lg {
     height: 40px;
     padding: 0 12px;
     border-radius: 11px;
 
-    .weflow-search-input {
+    .app-search-input {
       font-size: var(--font-base, 13px);
     }
   }
 
-  .weflow-search-icon {
+  .app-search-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -64,7 +64,7 @@
     flex-shrink: 0;
   }
 
-  .weflow-search-input {
+  .app-search-input {
     flex: 1;
     min-width: 0;
     border: none;
@@ -79,7 +79,7 @@
     }
   }
 
-  .weflow-search-clear {
+  .app-search-clear {
     display: flex;
     align-items: center;
     justify-content: center;

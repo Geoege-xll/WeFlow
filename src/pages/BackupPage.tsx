@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArchiveRestore, Database, Download, File, FileArchive, Hash, Image, Table, Upload, Video } from 'lucide-react'
-import { WeFlowCard, WeFlowPageContainer } from '../components/common'
+import { AppCard, AppPageContainer } from '../components/common'
 import './BackupPage.scss'
 
 type BackupManifest = NonNullable<Awaited<ReturnType<typeof window.electronAPI.backup.inspect>>['manifest']>
@@ -61,11 +61,11 @@ function BackupPage() {
     try {
       const hasResources = resourceOptions.includeImages || resourceOptions.includeVideos || resourceOptions.includeFiles
       const extension = hasResources ? 'tar' : 'tar.gz'
-      const defaultPath = `weflow-db-backup-${new Date().toISOString().slice(0, 10)}.${extension}`
+      const defaultPath = `omnimind-wechat-db-backup-${new Date().toISOString().slice(0, 10)}.${extension}`
       const result = await window.electronAPI.dialog.saveFile({
         title: '保存数据库备份',
         defaultPath,
-        filters: [{ name: 'WeFlow 数据库备份', extensions: hasResources ? ['tar'] : ['gz'] }]
+        filters: [{ name: 'OmniMindWeChat 数据库备份', extensions: hasResources ? ['tar'] : ['gz'] }]
       })
       if (result.canceled || !result.filePath) {
         setMessage('已取消')
@@ -102,7 +102,7 @@ function BackupPage() {
         title: '选择数据库备份',
         properties: ['openFile'],
         filters: [
-          { name: 'WeFlow 数据库备份', extensions: ['tar', 'gz', 'tgz'] },
+          { name: 'OmniMindWeChat 数据库备份', extensions: ['tar', 'gz', 'tgz'] },
           { name: '所有文件', extensions: ['*'] }
         ]
       })
@@ -156,7 +156,7 @@ function BackupPage() {
   }
 
   return (
-    <WeFlowPageContainer
+    <AppPageContainer
       title="数据库备份"
       className="backup-page-container"
       headerActions={
@@ -177,7 +177,7 @@ function BackupPage() {
       }
     >
       <div className="backup-page-content">
-        <WeFlowCard className="resource-options-group" aria-label="资源备份选项">
+        <AppCard className="resource-options-group" aria-label="资源备份选项">
           <div className="group-label">资源备份选项</div>
           <div className="capsule-checkbox-group">
             <label className={`capsule-checkbox ${resourceOptions.includeImages ? 'is-checked' : ''}`}>
@@ -211,9 +211,9 @@ function BackupPage() {
               <span>文件</span>
             </label>
           </div>
-        </WeFlowCard>
+        </AppCard>
 
-        <WeFlowCard className="backup-status-card">
+        <AppCard className="backup-status-card">
           <div className="status-badge">
             <ArchiveRestore size={20} />
           </div>
@@ -226,10 +226,10 @@ function BackupPage() {
               </div>
             )}
           </div>
-        </WeFlowCard>
+        </AppCard>
 
         <div className="backup-summary-grid">
-          <WeFlowCard hoverElastic className="stat-card">
+          <AppCard hoverElastic className="stat-card">
             <div className="stat-header">
               <div className="stat-icon-badge">
                 <Database size={18} />
@@ -237,9 +237,9 @@ function BackupPage() {
               <span className="stat-label">数据库</span>
             </div>
             <div className="stat-value">{summary.dbCount}</div>
-          </WeFlowCard>
+          </AppCard>
 
-          <WeFlowCard hoverElastic className="stat-card">
+          <AppCard hoverElastic className="stat-card">
             <div className="stat-header">
               <div className="stat-icon-badge">
                 <Table size={18} />
@@ -247,9 +247,9 @@ function BackupPage() {
               <span className="stat-label">表</span>
             </div>
             <div className="stat-value">{summary.tableCount}</div>
-          </WeFlowCard>
+          </AppCard>
 
-          <WeFlowCard hoverElastic className="stat-card">
+          <AppCard hoverElastic className="stat-card">
             <div className="stat-header">
               <div className="stat-icon-badge">
                 <Hash size={18} />
@@ -257,9 +257,9 @@ function BackupPage() {
               <span className="stat-label">增量行</span>
             </div>
             <div className="stat-value">{summary.rowCount.toLocaleString()}</div>
-          </WeFlowCard>
+          </AppCard>
 
-          <WeFlowCard hoverElastic className="stat-card">
+          <AppCard hoverElastic className="stat-card">
             <div className="stat-header">
               <div className="stat-icon-badge">
                 <FileArchive size={18} />
@@ -267,11 +267,11 @@ function BackupPage() {
               <span className="stat-label">资源文件</span>
             </div>
             <div className="stat-value">{summary.resourceCount.toLocaleString()}</div>
-          </WeFlowCard>
+          </AppCard>
         </div>
 
         {manifest && (
-          <WeFlowCard className="backup-manifest-card">
+          <AppCard className="backup-manifest-card">
             <div className="manifest-header">
               <h2 className="manifest-title">备份清册明细</h2>
               <span className="manifest-date">{formatDate(manifest.createdAt)}</span>
@@ -301,27 +301,27 @@ function BackupPage() {
                 </div>
               ))}
             </div>
-          </WeFlowCard>
+          </AppCard>
         )}
 
         {restoreSummary && (
           <div className="restore-result-grid">
-            <WeFlowCard hoverElastic className="stat-card">
+            <AppCard hoverElastic className="stat-card">
               <span className="stat-label">新增</span>
               <strong className="stat-value">{restoreSummary.inserted.toLocaleString()}</strong>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="stat-card">
+            </AppCard>
+            <AppCard hoverElastic className="stat-card">
               <span className="stat-label">已存在</span>
               <strong className="stat-value">{restoreSummary.ignored.toLocaleString()}</strong>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="stat-card">
+            </AppCard>
+            <AppCard hoverElastic className="stat-card">
               <span className="stat-label">跳过</span>
               <strong className="stat-value">{restoreSummary.skipped.toLocaleString()}</strong>
-            </WeFlowCard>
+            </AppCard>
           </div>
         )}
       </div>
-    </WeFlowPageContainer>
+    </AppPageContainer>
   )
 }
 

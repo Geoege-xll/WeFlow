@@ -208,6 +208,93 @@ describe('global AI queue and unified sender', () => {
     expect(queue.getSnapshot().recent[0].failureStage).toBe('generation')
   })
 
+  it('preserves a stable timeout reason and rejects blind generation retry', async () => {
+    const generate = vi.fn(async () => ({ kind: 'timeout' as const, error: 'AbortError' }))
+    const send = vi.fn(async () => ({ success: true }))
+    const queue = new GlobalAiQueue({ generate, send })
+    const task = queue.enqueue({ accountId: 'a', sessionId: 's', sessionName: 'contact', messageKeys: ['message'], text: 'customer text' })
+
+    await queue.whenIdle()
+
+    expect(queue.findTask(task.id)).toMatchObject({ status: 'generation_failed', failureStage: 'generation', reason: 'timeout' })
+    expect(queue.retry(task.id)).toBeUndefined()
+    expect(generate).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(queue.getSnapshot())).not.toContain('AbortError')
+  })
+
+  it.each([
+    ['execution_result_unknown', undefined, 'execution_result_unknown'],
+    ['auth', 'credential_revoked', 'credential_revoked'],
+    ['retry_exhausted', undefined, 'retry_exhausted'],
+    ['invalid_persisted_request', undefined, 'invalid_persisted_request'],
+    ['service_unavailable', undefined, 'service_unavailable'],
+    ['conflict', undefined, 'conflict']
+  ] as const)('将稳定失败 %s 安全终止为不可重试且绝不发送', async (kind, error, reason) => {
+    const generate = vi.fn(async () => ({ kind, ...(error ? { error } : {}) }))
+    const send = vi.fn(async () => ({ success: true }))
+    const queue = new GlobalAiQueue({ generate, send })
+    const task = queue.enqueue({
+      accountId: 'private-account', sessionId: 'private-session', sessionName: 'contact',
+      messageKeys: ['private-message-key'], text: 'private customer text'
+    })
+
+    await queue.whenIdle()
+
+    expect(queue.findTask(task.id)).toMatchObject({ status: 'generation_failed', failureStage: 'generation', reason })
+    expect(queue.retry(task.id)).toBeUndefined()
+    expect(generate).toHaveBeenCalledOnce()
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('保留普通 network 的显式重试能力，不把非标准 5xx 误当持久 tombstone', async () => {
+    const generate = vi.fn(async () => generate.mock.calls.length === 1
+      ? { kind: 'network' as const }
+      : { kind: 'reply' as const, text: 'recovered reply' })
+    const send = vi.fn(async () => ({ success: true }))
+    const queue = new GlobalAiQueue({ generate, send })
+    const first = queue.enqueue({
+      accountId: 'a', sessionId: 's', sessionName: 'contact', messageKeys: ['message'], text: 'customer text'
+    })
+    await queue.whenIdle()
+
+    expect(queue.findTask(first.id)).toMatchObject({ status: 'generation_failed', reason: 'network' })
+    const retry = queue.retry(first.id)
+    expect(retry?.id).not.toBe(first.id)
+    await queue.whenIdle()
+
+    expect(queue.findTask(retry!.id)).toMatchObject({ status: 'sent', replyText: 'recovered reply' })
+    expect(generate).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('202 processing 可使用同一批逐消息事实安全对账，不依赖新的 task UUID', async () => {
+    const seenMessages: unknown[] = []
+    const generate = vi.fn(async (task) => {
+      seenMessages.push(task.inboundMessages)
+      return generate.mock.calls.length === 1
+        ? { kind: 'processing' as const }
+        : { kind: 'reply' as const, text: 'completed reply' }
+    })
+    const send = vi.fn(async () => ({ success: true }))
+    const queue = new GlobalAiQueue({ generate, send })
+    const inboundMessages = [{
+      accountId: 'a', sessionId: 's', sessionName: 'S', sessionType: 'private' as const,
+      messageKey: 'local-private-key', direction: 'inbound' as const, text: 'hello', timestamp: 1,
+      messageType: 1, contentType: 'text' as const, senderExternalId: 's'
+    }]
+    const first = queue.enqueue({ accountId: 'a', sessionId: 's', sessionName: 'S', sessionType: 'private', inboundMessages, messageKeys: ['local-private-key'], text: 'hello' })
+    await queue.whenIdle()
+    expect(queue.findTask(first.id)).toMatchObject({ status: 'generation_failed', reason: 'processing' })
+    expect(send).not.toHaveBeenCalled()
+
+    const replay = queue.retry(first.id)
+    expect(replay?.id).not.toBe(first.id)
+    await queue.whenIdle()
+    expect(seenMessages).toEqual([inboundMessages, inboundMessages])
+    expect(queue.findTask(replay!.id)).toMatchObject({ status: 'sent', replyText: 'completed reply' })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
   it('keeps a pre-send Accessibility denial retryable as send_failed instead of delivery_unconfirmed', async () => {
     const queue = new GlobalAiQueue({
       autoSend: () => true,
@@ -264,5 +351,62 @@ describe('global AI queue and unified sender', () => {
     })
     expect(queue.retry(task.id)).toBeUndefined()
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('atomically confirms only delivery-unconfirmed without retrying or leaking failure context', async () => {
+    let now = 100
+    const onChanged = vi.fn()
+    const send = vi.fn(async () => ({
+      success: false,
+      stage: 'verification_postsend' as const,
+      error: 'private_verifier_reason'
+    }))
+    const queue = new GlobalAiQueue({
+      generate: async () => ({ kind: 'reply', text: '保留的回复' }),
+      send,
+      now: () => ++now,
+      onChanged
+    })
+    const uncertain = queue.enqueue({ accountId: 'private-account', sessionId: 'session-a', sessionName: '会话 A', messageKeys: ['private-message-key'], text: 'private input' })
+    await queue.whenIdle()
+    const before = queue.findTask(uncertain.id)!
+    const generatedAt = before.generatedAt
+    const previousUpdatedAt = before.updatedAt
+    onChanged.mockClear()
+
+    // 两个并发调用最终仍由队列的同步资格检查原子串行：只有第一条命令可以转换并广播。
+    const results = await Promise.all([
+      Promise.resolve().then(() => queue.confirmDelivery(uncertain.id)),
+      Promise.resolve().then(() => queue.confirmDelivery(uncertain.id))
+    ])
+
+    expect(results).toEqual([true, false])
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(onChanged).toHaveBeenCalledOnce()
+    expect(queue.findTask(uncertain.id)).toMatchObject({
+      status: 'sent',
+      replyText: '保留的回复',
+      generatedAt,
+      reason: undefined,
+      failureStage: undefined
+    })
+    expect(queue.findTask(uncertain.id)!.updatedAt).toBeGreaterThan(previousUpdatedAt)
+    const publicTask = queue.getSnapshot().recent.find((task) => task.id === uncertain.id)
+    expect(publicTask).toMatchObject({ status: 'sent', reason: undefined, failureStage: undefined })
+
+    expect(queue.confirmDelivery('unknown-task-id')).toBe(false)
+    expect(queue.confirmDelivery(uncertain.id)).toBe(false)
+  })
+
+  it('refuses confirmation for send_failed without invoking another send', async () => {
+    const send = vi.fn(async () => ({ success: false, stage: 'automation' as const, error: 'input_submit_failed' }))
+    const queue = new GlobalAiQueue({ generate: async () => ({ kind: 'reply', text: 'draft' }), send })
+    const task = queue.enqueue({ accountId: 'a', sessionId: 's', sessionName: 'S', messageKeys: ['m'], text: 'input' })
+    await queue.whenIdle()
+
+    expect(queue.findTask(task.id)?.status).toBe('send_failed')
+    expect(queue.confirmDelivery(task.id)).toBe(false)
+    expect(queue.findTask(task.id)).toMatchObject({ status: 'send_failed', reason: 'input_submit_failed' })
+    expect(send).toHaveBeenCalledOnce()
   })
 })

@@ -18,7 +18,7 @@ describe('Phase 4 QA regressions', () => {
         status: 200,
         headers: { 'content-type': 'text/html' }
       })),
-      timeoutMs: 100
+      authCheckTimeoutMs: 100
     })
 
     await expect(client.check('https://api.example.com/api/v1/open', 'secret')).resolves.toEqual({
@@ -31,20 +31,32 @@ describe('Phase 4 QA regressions', () => {
     const responses = [
       new Response(JSON.stringify({
         code: 200,
-        data: { content: 'production reply', is_human_required: false, handoff_status: 'none' }
+        data: {
+          operation_id: 'operation-1', status: 'completed', reply: { content: 'production reply', format: 'text' },
+          handoff: { required: false, status: 'none', reason: null }
+        }
       }), { status: 200 }),
       new Response(JSON.stringify({
         code: 200,
-        data: { content: 'must not send', is_human_required: true, handoff_status: 'recommended' }
+        data: {
+          operation_id: 'operation-2', status: 'completed', reply: { content: 'must not send', format: 'text' },
+          handoff: { required: true, status: 'recommended', reason: 'identity_unproven' }
+        }
       }), { status: 200 })
     ]
-    const client = new OmniMindPythonClient({ fetch: vi.fn(async () => responses.shift()!), timeoutMs: 100 })
+    const client = new OmniMindPythonClient({ fetch: vi.fn(async () => responses.shift()!), chatTransportGuardMs: 100 })
     const input = {
       baseUrl: 'http://127.0.0.1:8000/api/v1/open',
       apiKey: 'secret',
+      accountId: 'account-a',
       sessionId: 'session',
-      externalUserId: 'contact',
-      message: 'hello'
+      sessionName: 'Contact',
+      sessionType: 'private' as const,
+      messages: [{
+        accountId: 'account-a', sessionId: 'session', sessionName: 'Contact', sessionType: 'private' as const,
+        messageKey: 'local-message-key', direction: 'inbound' as const, text: 'hello', timestamp: 1,
+        messageType: 1, contentType: 'text' as const, senderExternalId: 'contact'
+      }]
     }
 
     await expect(client.chat(input)).resolves.toEqual({ kind: 'reply', text: 'production reply' })
@@ -121,5 +133,55 @@ describe('Phase 4 QA regressions', () => {
     })
 
     expect(controller.getSnapshot()).not.toHaveProperty('activeAccountId')
+  })
+
+  it('projects a confirmed delivery as one sanitized sent snapshot without resending', async () => {
+    vi.useFakeTimers()
+    try {
+      const hub = new NormalizedMessageEventHub()
+      const send = vi.fn(async () => ({
+        success: false,
+        stage: 'verification_postsend' as const,
+        error: 'private-verifier-reason'
+      }))
+      const onSnapshotChanged = vi.fn()
+      const controller = new OmniMindController({
+        hub,
+        generate: async () => ({ kind: 'reply', text: '保留回复' }),
+        send,
+        batchDelayMs: 500,
+        accountId: () => 'private-account-id',
+        scope: () => ['private-session-id'],
+        onSnapshotChanged
+      })
+      controller.start()
+      hub.publish({
+        accountId: 'private-account-id', sessionId: 'private-session-id', sessionName: '可见会话',
+        messageKey: 'private-message-key', direction: 'inbound', text: 'private input', timestamp: 1,
+        sessionType: 'private', messageType: 1, contentType: 'text'
+      })
+      await vi.advanceTimersByTimeAsync(500)
+      await controller.whenIdle()
+      const uncertain = controller.getSnapshot().recent[0]
+      expect(uncertain.status).toBe('delivery_unconfirmed')
+      onSnapshotChanged.mockClear()
+
+      expect(controller.confirmDelivery(uncertain.id)).toBe(true)
+      expect(controller.confirmDelivery(uncertain.id)).toBe(false)
+
+      expect(send).toHaveBeenCalledOnce()
+      expect(onSnapshotChanged).toHaveBeenCalledOnce()
+      const snapshot = controller.getSnapshot()
+      expect(snapshot.recent[0]).toMatchObject({ id: uncertain.id, status: 'sent', reason: undefined, failureStage: undefined })
+      expect(snapshot.recent[0]).not.toHaveProperty('accountId')
+      expect(snapshot.recent[0]).not.toHaveProperty('messageKeys')
+      expect(snapshot.recent[0]).not.toHaveProperty('text')
+      expect(JSON.stringify(snapshot)).not.toContain('private-verifier-reason')
+      expect(JSON.stringify(snapshot)).not.toContain('private-account-id')
+      expect(JSON.stringify(snapshot)).not.toContain('private-message-key')
+      controller.stop()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

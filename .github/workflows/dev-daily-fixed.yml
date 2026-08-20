@@ -358,8 +358,8 @@ jobs:
 
           ## macOS 安装提示
           - 如果被系统提示已损坏，你需要在终端执行以下命令去除隔离标记：
-          - \`xattr -dr com.apple.quarantine "/Applications/WeFlow.app"\`
-          - 执行后重新打开 WeFlow。
+          - \`xattr -dr com.apple.quarantine "/Applications/OmniMindWeChat.app"\`
+          - 执行后重新打开 OmniMindWeChat。
 
           ## 说明
           - 该发布页的同名资源会被后续构建覆盖，请勿将其视作长期归档版本。

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, ChevronRight, Database, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, Database, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
@@ -336,12 +336,17 @@ function Sidebar({ collapsed }: SidebarProps) {
   const databaseBasename = getDatabaseBasename(dbPath)
   const databaseStatusLabel = isDbConnected
     ? `微信已绑定：${databaseBasename}`
-    : '微信未绑定，点击配置'
+    : '微信未绑定'
 
-  const openDatabaseSettings = (): void => {
+  const handleLockAction = (e?: React.MouseEvent): void => {
+    e?.stopPropagation()
+    if (authEnabled) {
+      setLocked(true)
+      return
+    }
     navigate('/settings', {
       state: {
-        initialTab: 'database',
+        initialTab: 'security',
         backgroundLocation: location
       }
     })
@@ -352,32 +357,43 @@ function Sidebar({ collapsed }: SidebarProps) {
       <aside
         className={`sidebar ${collapsed ? 'collapsed' : ''}`}
       >
-        {/* Sidebar Header: Database Status + User Profile Card */}
+        {/* Sidebar Header: Database Status & Lock + User Profile Card */}
         <div className="sidebar-header">
-          <button
-            type="button"
+          <div
             className={`sidebar-database-status ${isDbConnected ? 'connected' : 'disconnected'}`}
-            onClick={openDatabaseSettings}
             aria-label={databaseStatusLabel}
-            title={databaseStatusLabel}
+            title={collapsed ? databaseStatusLabel : undefined}
           >
-            <span className="sidebar-database-icon" aria-hidden="true">
-              <Database size={14} />
-              <span className="sidebar-database-compact-dot" />
-            </span>
-            {!collapsed && (
-              <span className="sidebar-database-copy">
-                <span className="sidebar-database-state">
-                  <span className="sidebar-database-dot" aria-hidden="true" />
-                  <span>{isDbConnected ? '微信已绑定' : '微信未绑定'}</span>
-                </span>
-                <span className="sidebar-database-detail">
-                  {isDbConnected ? databaseBasename : '点击配置'}
-                </span>
+            <div className="sidebar-database-main">
+              <span className="sidebar-database-icon" aria-hidden="true">
+                <Database size={14} />
+                <span className="sidebar-database-compact-dot" />
               </span>
+              {!collapsed && (
+                <span className="sidebar-database-copy">
+                  <span className="sidebar-database-state">
+                    <span className="sidebar-database-dot" aria-hidden="true" />
+                    <span>{isDbConnected ? '微信已绑定' : '微信未绑定'}</span>
+                  </span>
+                  <span className="sidebar-database-detail">
+                    {isDbConnected ? databaseBasename : '未检测到微信数据'}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {!collapsed && (
+              <button
+                type="button"
+                className={`sidebar-lock-btn ${authEnabled ? 'lock-enabled' : 'lock-disabled'}`}
+                onClick={handleLockAction}
+                title={lockActionLabel}
+                aria-label={lockActionLabel}
+              >
+                {authEnabled ? <Lock size={13} /> : <LockOpen size={13} />}
+              </button>
             )}
-            {!collapsed && <ChevronRight className="sidebar-database-chevron" size={14} aria-hidden="true" />}
-          </button>
+          </div>
 
           <div className="sidebar-user-card-wrap" ref={accountCardWrapRef}>
             <div
@@ -562,31 +578,6 @@ function Sidebar({ collapsed }: SidebarProps) {
             </NavLink>
           </div>
         </nav>
-
-        <div className="sidebar-footer">
-          <button
-            className="nav-item sidebar-lock-action"
-            onClick={() => {
-              if (authEnabled) {
-                setLocked(true)
-                return
-              }
-              navigate('/settings', {
-                state: {
-                  initialTab: 'security',
-                  backgroundLocation: location
-                }
-              })
-            }}
-            title={collapsed ? lockActionLabel : undefined}
-            aria-label={lockActionLabel}
-          >
-            <span className="sidebar-icon-badge badge-lock">
-              {authEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
-            </span>
-            <span className="nav-label">{lockActionLabel}</span>
-          </button>
-        </div>
       </aside>
     </>
   )

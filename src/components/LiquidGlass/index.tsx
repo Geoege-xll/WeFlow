@@ -9,7 +9,7 @@ import './liquidGlass.scss'
  * https://github.com/rdev/liquid-glass-react
  *
  * 相对原库的调整：
- * - 移除内部 Tailwind 类名，全部改为内联样式（WeFlow 无 Tailwind 运行时）
+ * - 移除内部 Tailwind 类名，全部改为内联样式（OmniMindWeChat 无 Tailwind 运行时）
  * - 由"固定定位 + 居中平移"的悬浮布局改为常规文档流布局，定位交给调用方
  * - 移除原库 overLight 的黑色压暗层：Chromium 中与 backdrop-filter 同级的
  *   mix-blend 图层无法参与混合、会按普通合成渲染，不透明黑层因此退化为实心黑块。

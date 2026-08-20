@@ -5,11 +5,12 @@ import Store from 'electron-store'
 import { expandHomePath } from '../utils/pathUtils'
 import { CacheMapStore } from './cacheMapStore'
 import { isValidImageAesKey, isValidImageXorKey, type AccountConfigBundle } from '../../shared/omnimind/account-bundle'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 // 条件导入 electron（Worker 环境中不可用）
 let app: any = null
 let safeStorage: any = null
-const isWorkerThread = process.env.WEFLOW_WORKER === '1'
+const isWorkerThread = process.env.OMNIMIND_WECHAT_WORKER === '1'
 if (!isWorkerThread) {
   try {
     const electron = require('electron')
@@ -289,17 +290,14 @@ export class ConfigService {
     }
 
     const storeOptions: any = {
-      name: 'WeFlow-config',
+      name: APP_IDENTITY.configFileBaseName,
       defaults,
-      projectName: String(process.env.WEFLOW_PROJECT_NAME || 'WeFlow').trim() || 'WeFlow'
+      projectName: String(process.env.OMNIMIND_WECHAT_PROJECT_NAME || APP_IDENTITY.productName).trim() || APP_IDENTITY.productName,
+      // 主进程与 Worker 都显式绑定同一个绝对 userData。即使 electron-store 将来调整
+      // projectName 的默认路径推导，也不能再创建小写包名目录或第二份配置文件。
+      cwd: this.getUserDataPath()
     }
-    const runningInWorker = process.env.WEFLOW_WORKER === '1'
-    if (runningInWorker) {
-      const cwd = String(process.env.WEFLOW_CONFIG_CWD || process.env.WEFLOW_USER_DATA_PATH || '').trim()
-      if (cwd) {
-        storeOptions.cwd = cwd
-      }
-    }
+    const runningInWorker = process.env.OMNIMIND_WECHAT_WORKER === '1'
 
     try {
       this.store = new Store<ConfigSchema>(storeOptions)
@@ -308,8 +306,8 @@ export class ConfigService {
       if (message.includes('projectName')) {
         const fallbackOptions = {
           ...storeOptions,
-          projectName: 'WeFlow',
-          cwd: storeOptions.cwd || process.env.WEFLOW_CONFIG_CWD || process.env.WEFLOW_USER_DATA_PATH || process.cwd()
+          projectName: APP_IDENTITY.productName,
+          cwd: storeOptions.cwd
         }
         this.store = new Store<ConfigSchema>(fallbackOptions)
       } else {
@@ -1039,7 +1037,7 @@ export class ConfigService {
   /**
    * 获取账号目录的真实绝对路径。
    *
-   * 这是 WeFlow 统一的账号目录解析入口，所有服务都应通过本方法获取
+   * 这是 OmniMindWeChat 统一的账号目录解析入口，所有服务都应通过本方法获取
    * 账号目录，而不要自行拼接 `join(dbPath, wxid)`。
    *
    * ## 修复 #996（错误码 -3001：未找到数据库目录）
@@ -1144,7 +1142,7 @@ export class ConfigService {
   }
 
   private getUserDataPath(): string {
-    const workerUserDataPath = String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+    const workerUserDataPath = String(process.env.OMNIMIND_WECHAT_USER_DATA_PATH || process.env.OMNIMIND_WECHAT_CONFIG_CWD || '').trim()
     if (workerUserDataPath) {
       return workerUserDataPath
     }

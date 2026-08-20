@@ -11,7 +11,7 @@ let fixturePath = ''
 let fixtureWithoutBoundaryPath = ''
 
 beforeAll(async () => {
-  const outputDirectory = await mkdtemp(join(tmpdir(), 'weflow-closed-pipe-'))
+  const outputDirectory = await mkdtemp(join(tmpdir(), 'omnimind-wechat-closed-pipe-'))
   fixturePath = join(outputDirectory, 'electron-child.cjs')
   fixtureWithoutBoundaryPath = join(outputDirectory, 'electron-child-without-boundary.cjs')
   await Promise.all([

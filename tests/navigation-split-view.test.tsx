@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -7,12 +7,49 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TitleBar from '../src/components/TitleBar'
 import Sidebar from '../src/components/Sidebar'
-import { WeFlowPageContainer } from '../src/components/common/WeFlowPageContainer'
+import { AppPageContainer } from '../src/components/common/AppPageContainer'
 import { DetailChromeProvider } from '../src/components/common/DetailChromeContext'
 import { useAppStore } from '../src/stores/appStore'
 import ChatHeader from '../src/pages/Chat/ChatHeader'
+import ChatPage from '../src/pages/ChatPage'
+import { useChatStore } from '../src/stores/chatStore'
 
 afterEach(cleanup)
+
+const omniMindSettings = {
+  schemaVersion: 2 as const,
+  pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+  managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'alice', displayName: 'Alice' }] },
+  autoSend: false,
+  ignoreOfficial: true,
+  hasApiKey: true,
+  batchWindowMs: 2000,
+  requestTimeoutMs: 15000
+}
+
+const installChatPageElectronApi = (): void => {
+  const asyncFallback = async () => ({ success: true, sessions: [], messages: [], contacts: [] })
+  const fallbackNamespace = new Proxy({}, { get: () => asyncFallback })
+  Object.defineProperty(window, 'electronAPI', {
+    configurable: true,
+    value: new Proxy({
+      omniMind: {
+        getSnapshot: async () => ({ runtimeState: 'stopped', waiting: [], recent: [] }),
+        getSettings: async () => omniMindSettings,
+        onSnapshotChanged: () => () => undefined,
+        saveSettings: async () => undefined,
+        clearApiKey: async () => undefined,
+        testConnection: async () => ({ success: true })
+      },
+      config: { get: async () => null },
+      chat: fallbackNamespace
+    }, { get: (target, key) => Reflect.get(target, key) ?? fallbackNamespace })
+  })
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: class { observe() {} unobserve() {} disconnect() {} }
+  })
+}
 
 const installSidebarElectronApi = (): void => {
   Object.defineProperty(window, 'electronAPI', {
@@ -39,12 +76,24 @@ const SidebarLocationProbe = () => {
 }
 
 describe('NavigationSplitView history controls', () => {
+  it('lets the Home fixed container own the only padding and overflow boundary', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8')
+    const home = readFileSync(resolve(process.cwd(), 'src/pages/HomePage.tsx'), 'utf8')
+
+    // /home 与聊天等已迁移页面共用 native-detail-container，先清除旧 content 的
+    // padding/overflow，再由 HomePage 的统一 fixed 容器提供唯一安全边距。
+    expect(app).toMatch(/usesNativeDetailContainer[^\n]*routeLocation\.pathname\s*===\s*['"]\/home['"]/)
+    expect(home).toContain('<AppPageContainer className="home-page" scrollable={false}>')
+    expect(home).not.toContain('title=')
+    expect(home).not.toContain('subtitle=')
+  })
+
   it('keeps unavailable page history controls visible but disabled', () => {
     render(
       <MemoryRouter>
-        <WeFlowPageContainer title="详情" showNavigationStack>
+        <AppPageContainer title="详情" showNavigationStack>
           内容
-        </WeFlowPageContainer>
+        </AppPageContainer>
       </MemoryRouter>
     )
 
@@ -57,7 +106,7 @@ describe('NavigationSplitView history controls', () => {
     const onForward = vi.fn()
     render(
       <MemoryRouter>
-        <WeFlowPageContainer
+        <AppPageContainer
           title="详情"
           showNavigationStack
           onBack={onBack}
@@ -117,11 +166,53 @@ describe('NavigationSplitView history controls', () => {
   })
 })
 
-describe('WeFlowPageContainer native detail states', () => {
+describe('ChatPage pure split-view boundary', () => {
+  it('keeps normal chat controls while excluding every automatic-hosting surface', () => {
+    installChatPageElectronApi()
+    useChatStore.getState().reset()
+    useChatStore.setState({ isConnected: true, isConnecting: false })
+
+    render(<div id="root"><MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter></div>)
+    expect(screen.getByPlaceholderText('搜索')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '刷新会话' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '一键已读' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /托管/ })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: /托管/ })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: /托管/ })).toBeNull()
+  })
+
+  it('keeps the real group-members trigger synchronized with its unique inspector', () => {
+    installChatPageElectronApi()
+    const session = { username: 'team@chatroom', displayName: 'Team', type: 2, unreadCount: 0, summary: '', sortTimestamp: 0, lastTimestamp: 0, lastMsgType: 1 }
+    useChatStore.getState().reset()
+    useChatStore.setState({
+      isConnected: true,
+      isConnecting: false,
+      sessions: [session],
+      filteredSessions: [session],
+      currentSessionId: session.username,
+      messages: []
+    })
+
+    render(<MemoryRouter initialEntries={['/chat']}><ChatPage /></MemoryRouter>)
+    const membersTrigger = screen.getByRole('button', { name: '群成员' })
+    expect(membersTrigger.getAttribute('aria-expanded')).toBe('false')
+    expect(membersTrigger.getAttribute('aria-controls')).toBe('group-members-inspector')
+
+    fireEvent.click(membersTrigger)
+    expect(membersTrigger.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelectorAll('#group-members-inspector')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '关闭群成员面板' }))
+    expect(membersTrigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('#group-members-inspector')).toBeNull()
+  })
+})
+
+describe('AppPageContainer native detail states', () => {
   it('supports canonical loading and empty props with accessible status semantics', () => {
     const { rerender } = render(
       <MemoryRouter>
-        <WeFlowPageContainer loading loadingText="正在载入" />
+        <AppPageContainer loading loadingText="正在载入" />
       </MemoryRouter>
     )
 
@@ -129,7 +220,7 @@ describe('WeFlowPageContainer native detail states', () => {
 
     rerender(
       <MemoryRouter>
-        <WeFlowPageContainer
+        <AppPageContainer
           empty
           emptyTitle="没有结果"
           emptyDescription="调整条件后重试"
@@ -146,7 +237,7 @@ describe('WeFlowPageContainer native detail states', () => {
   it('renders footer actions in the bottom safe-area inset', () => {
     const { container } = render(
       <MemoryRouter>
-        <WeFlowPageContainer footerActions={<button type="button">保存</button>} />
+        <AppPageContainer footerActions={<button type="button">保存</button>} />
       </MemoryRouter>
     )
 
@@ -158,9 +249,9 @@ describe('WeFlowPageContainer native detail states', () => {
   it('lets canonical false override legacy loading and empty flags', () => {
     render(
       <MemoryRouter>
-        <WeFlowPageContainer loading={false} isLoading empty={false} isEmpty>
+        <AppPageContainer loading={false} isLoading empty={false} isEmpty>
           已加载内容
-        </WeFlowPageContainer>
+        </AppPageContainer>
       </MemoryRouter>
     )
 
@@ -175,13 +266,13 @@ describe('Detail chrome declaration bridge', () => {
       <MemoryRouter initialEntries={['/backup']}>
         <DetailChromeProvider>
           <TitleBar showLogo={false} showWindowControls={false} />
-          <WeFlowPageContainer
+          <AppPageContainer
             title="声明标题"
             subtitle="声明副标题"
             headerActions={<button type="button">统一操作</button>}
           >
             页面内容
-          </WeFlowPageContainer>
+          </AppPageContainer>
         </DetailChromeProvider>
       </MemoryRouter>
     )
@@ -189,7 +280,7 @@ describe('Detail chrome declaration bridge', () => {
     expect(screen.getAllByText('声明标题')).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: '统一操作' })).toHaveLength(1)
     expect(container.querySelector('.title-bar')?.textContent).toContain('声明副标题')
-    expect(container.querySelector('.weflow-page-header')).toBeNull()
+    expect(container.querySelector('.app-page-header')).toBeNull()
   })
 
   it('cleans legacy chrome declarations on unmount and restores the route fallback', () => {
@@ -201,7 +292,7 @@ describe('Detail chrome declaration bridge', () => {
           <TitleBar showLogo={false} showWindowControls={false} />
           {showDetail
             ? (
-                <WeFlowPageContainer
+                <AppPageContainer
                   title="旧接口标题"
                   description="旧接口副标题"
                   actions={<button type="button">旧接口操作</button>}
@@ -258,43 +349,49 @@ describe('Sidebar account menu accessibility', () => {
 })
 
 describe('R5 sidebar database status contract', () => {
-  it('replaces navigation search with a basename-only connected database button', () => {
+  it('replaces navigation search with a basename-only connected database status indicator and lock button', () => {
     installSidebarElectronApi()
     useAppStore.setState({
       isDbConnected: true,
-      dbPath: '/Users/example/Library/Application Support/WeFlow/account.db'
+      dbPath: '/Users/example/Library/Application Support/OmniMindWeChat/account.db'
     })
 
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <Sidebar collapsed={false} />
       </MemoryRouter>
     )
 
     expect(screen.queryByRole('textbox', { name: '搜索' })).toBeNull()
-    const databaseButton = screen.getByRole('button', { name: '微信已绑定：account.db' })
-    expect(databaseButton.getAttribute('title')).toBe('微信已绑定：account.db')
-    expect(databaseButton.textContent).toContain('微信已绑定')
-    expect(databaseButton.textContent).toContain('account.db')
-    expect(databaseButton.textContent).not.toContain('/Users/example')
+    const statusCard = container.querySelector('.sidebar-database-status') as HTMLElement
+    expect(statusCard).toBeTruthy()
+    expect(statusCard.getAttribute('aria-label')).toBe('微信已绑定：account.db')
+    expect(statusCard.textContent).toContain('微信已绑定')
+    expect(statusCard.textContent).toContain('account.db')
+    expect(statusCard.textContent).not.toContain('/Users/example')
+
+    const lockButton = screen.getByRole('button', { name: '开启应用锁' })
+    expect(lockButton).toBeTruthy()
   })
 
-  it('shows disconnected recovery text and opens the database settings tab with background location', () => {
+  it('shows disconnected status and triggers lock security action with background location', () => {
     installSidebarElectronApi()
     useAppStore.setState({ isDbConnected: false, dbPath: null })
 
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <Sidebar collapsed={false} />
         <SidebarLocationProbe />
       </MemoryRouter>
     )
 
-    const databaseButton = screen.getByRole('button', { name: '微信未绑定，点击配置' })
-    expect(databaseButton.textContent).toContain('微信未绑定')
-    expect(databaseButton.textContent).toContain('点击配置')
-    fireEvent.click(databaseButton)
-    expect(screen.getByTestId('sidebar-location').textContent).toBe('/settings|database|/chat')
+    const statusCard = container.querySelector('.sidebar-database-status') as HTMLElement
+    expect(statusCard.textContent).toContain('微信未绑定')
+    expect(statusCard.textContent).toContain('未检测到微信数据')
+
+    const lockButton = screen.getByRole('button', { name: '开启应用锁' })
+    fireEvent.click(lockButton)
+    expect(screen.getByTestId('sidebar-location').textContent).toBe('/settings|security|/chat')
   })
 
   it('uses basename-only semantics and a 40px control in collapsed mode', () => {
@@ -310,10 +407,10 @@ describe('R5 sidebar database status contract', () => {
       </MemoryRouter>
     )
 
-    const databaseButton = screen.getByRole('button', { name: '微信已绑定：message.db' })
-    expect(databaseButton.getAttribute('title')).toBe('微信已绑定：message.db')
-    expect(databaseButton.textContent).not.toContain('C:\\Users\\example')
-    expect(databaseButton.classList.contains('sidebar-database-status')).toBe(true)
+    const statusCard = container.querySelector('.sidebar-database-status') as HTMLElement
+    expect(statusCard.getAttribute('title')).toBe('微信已绑定：message.db')
+    expect(statusCard.textContent).not.toContain('C:\\Users\\example')
+    expect(statusCard.classList.contains('sidebar-database-status')).toBe(true)
     expect(container.querySelector('.sidebar-database-copy')).toBeNull()
   })
 
@@ -422,7 +519,7 @@ describe('NavigationSplitView static layout contract', () => {
     const titleBarStyles = readFileSync(resolve(process.cwd(), 'src/components/TitleBar.scss'), 'utf8')
     const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.scss'), 'utf8')
     const settingsStyles = readFileSync(resolve(process.cwd(), 'src/pages/SettingsPage.scss'), 'utf8')
-    const dialogStyles = readFileSync(resolve(process.cwd(), 'src/components/common/WeFlowDialog.scss'), 'utf8')
+    const dialogStyles = readFileSync(resolve(process.cwd(), 'src/components/common/AppDialog.scss'), 'utf8')
     const closeDialogStyles = readFileSync(resolve(process.cwd(), 'src/components/WindowCloseDialog.scss'), 'utf8')
 
     expect(tokens).toContain('--layer-shell: 1000')
@@ -461,7 +558,6 @@ describe('R6 compact Chat workbench contract', () => {
     isGroupChat={false}
     standaloneSessionWindow={false}
     showGroupMembersPanel={false}
-    showGroupSummaryPanel={false}
     showJumpPopover={false}
     showInSessionSearch={false}
     showDetailPanel={false}
@@ -477,7 +573,6 @@ describe('R6 compact Chat workbench contract', () => {
     isRefreshingMessages={false}
     isLoadingMessages={false}
     currentSessionId="alice"
-    compactHeader
     jumpCalendarWrapRef={createRef<HTMLDivElement>()}
     onTriggerSessionInsight={vi.fn()}
     onToggleGroupSummaryPanel={vi.fn()}
@@ -508,8 +603,10 @@ describe('R6 compact Chat workbench contract', () => {
     expect(screen.getByRole('menuitem', { name: '批量语音处理' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '批量解密图片' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '刷新消息' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: '会话详情' })).toBeTruthy()
-    for (const name of ['立即触发当前聊天 AI 见解', '导出当前会话', '批量语音处理', '批量解密图片', '刷新消息', '会话详情']) {
+    expect(screen.queryByRole('menuitem', { name: '跳转到指定时间' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '搜索会话消息' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '会话详情' })).toBeNull()
+    for (const name of ['立即触发当前聊天 AI 见解', '导出当前会话', '批量语音处理', '批量解密图片', '刷新消息']) {
       expect(screen.getAllByRole('menuitem', { name })).toHaveLength(1)
     }
 
@@ -522,9 +619,9 @@ describe('R6 compact Chat workbench contract', () => {
     const { onExportCurrentSession } = renderCompactChatHeader()
     const more = screen.getByRole('button', { name: '更多会话操作' })
     fireEvent.click(more)
-    const insightItem = screen.getByRole('menuitem', { name: '立即触发当前聊天 AI 见解' })
+    const firstItem = screen.getByRole('menuitem', { name: '立即触发当前聊天 AI 见解' })
     const exportItem = screen.getByRole('menuitem', { name: '导出当前会话' })
-    await waitFor(() => expect(document.activeElement).toBe(insightItem))
+    await waitFor(() => expect(document.activeElement).toBe(firstItem))
 
     fireEvent.click(exportItem)
 
@@ -533,7 +630,38 @@ describe('R6 compact Chat workbench contract', () => {
     expect(document.activeElement).toBe(more)
   })
 
-  it('styles the compact overflow as an anchored vertical token-owned menu and supports arrow navigation', async () => {
+  it('flips the portalled More menu inside the viewport and restores focus after outside dismissal', async () => {
+    const heightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(700)
+    const widthSpy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(800)
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('chat-header-more-menu')) {
+        return { x: 0, y: 0, top: 0, left: 0, right: 280, bottom: 200, width: 280, height: 200, toJSON: () => ({}) }
+      }
+      if (this.getAttribute('aria-label') === '更多会话操作') {
+        return { x: 736, y: 620, top: 620, left: 736, right: 780, bottom: 664, width: 44, height: 44, toJSON: () => ({}) }
+      }
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) }
+    })
+    try {
+      renderCompactChatHeader()
+      const more = screen.getByRole('button', { name: '更多会话操作' })
+      fireEvent.click(more)
+      const menu = await screen.findByRole('menu')
+      await waitFor(() => expect(menu.getAttribute('data-placement')).toBe('above'))
+      expect(menu.style.top).toBe('414px')
+      expect(menu.style.left).toBe('500px')
+
+      fireEvent.pointerDown(document.body)
+      expect(more.getAttribute('aria-expanded')).toBe('false')
+      expect(document.activeElement).toBe(more)
+    } finally {
+      rectSpy.mockRestore()
+      widthSpy.mockRestore()
+      heightSpy.mockRestore()
+    }
+  })
+
+  it('styles the compact overflow as a portalled viewport menu and supports arrow navigation', async () => {
     renderCompactChatHeader()
     const more = screen.getByRole('button', { name: '更多会话操作' })
     fireEvent.click(more)
@@ -548,32 +676,31 @@ describe('R6 compact Chat workbench contract', () => {
 
     const styles = readFileSync(resolve(process.cwd(), 'src/pages/ChatPage.scss'), 'utf8')
     expect(styles).toMatch(/\.chat-header-more-wrap\s*\{[^}]*position:\s*relative/s)
-    expect(styles).toMatch(/\.chat-header-more-menu\s*\{[^}]*position:\s*absolute[^}]*right:\s*0[^}]*z-index:[^}]*display:\s*(?:flex|grid)/s)
+    expect(styles).toMatch(/\.chat-header-more-menu\s*\{[^}]*position:\s*fixed[^}]*z-index:[^}]*display:\s*(?:flex|grid)/s)
     expect(styles).toMatch(/\.chat-header-more-menu[^}]*border:\s*1px solid var\(--border-color\)[^}]*background:\s*var\(--(?:card-bg|bg-secondary)\)/s)
     expect(styles).toMatch(/\.chat-header-more-menu[^]*?>\s*button\s*\{[^}]*width:\s*100%[^}]*min-height:\s*44px[^}]*text-align:\s*left/s)
     expect(styles).toMatch(/\.chat-header-more-menu[^]*?&:focus-visible\s*\{[^}]*outline:/s)
   })
 
-  it('renders the six ordinary desktop actions once and in production order', () => {
+  it('renders the streamlined core desktop actions once and in production order', () => {
     const props = renderCompactChatHeader()
     props.rerender(<ChatHeader
       session={{ username: 'alice', displayName: 'Alice', type: 1, unreadCount: 0, summary: '', sortTimestamp: 0, lastTimestamp: 0, lastMsgType: 1 }}
-      isGroupChat={false} standaloneSessionWindow={false} showGroupMembersPanel={false} showGroupSummaryPanel={false}
+      isGroupChat={false} standaloneSessionWindow={false} showGroupMembersPanel={false}
       showJumpPopover={false} showInSessionSearch={false} showDetailPanel={false} aiGroupSummaryEnabled={false}
       shouldHideStandaloneDetailButton={false} isPrivateSnsSupported={false} isExportActionBusy={false}
       isCurrentSessionExporting={false} isPreparingExportDialog={false} isBatchTranscribing={false}
       isBatchDecrypting={false} isTriggeringSessionInsight={false} isRefreshingMessages={false}
-      isLoadingMessages={false} currentSessionId="alice" compactHeader={false} jumpCalendarWrapRef={createRef<HTMLDivElement>()}
+      isLoadingMessages={false} currentSessionId="alice" jumpCalendarWrapRef={createRef<HTMLDivElement>()}
       onTriggerSessionInsight={vi.fn()} onToggleGroupSummaryPanel={vi.fn()} onGroupAnalytics={vi.fn()}
       onToggleGroupMembersPanel={vi.fn()} onExportCurrentSession={vi.fn()} onOpenSnsTimeline={vi.fn()}
       onBatchTranscribe={vi.fn()} onBatchDecrypt={vi.fn()} onToggleJumpPopover={vi.fn()}
       onToggleInSessionSearch={vi.fn()} onRefreshMessages={vi.fn()} onToggleDetailPanel={vi.fn()}
     />)
     const labels = Array.from(props.container.querySelectorAll('.header-actions button')).map((button) => button.getAttribute('aria-label'))
-    expect(labels).toEqual(['立即触发当前聊天 AI 见解', '导出当前会话', '批量语音处理', '批量解密图片', '刷新消息', '会话详情'])
+    expect(labels).toEqual(['跳转到指定时间', '搜索会话消息', '会话详情', '更多会话操作'])
     const styles = readFileSync(resolve(process.cwd(), 'src/pages/ChatPage.scss'), 'utf8')
-    expect(styles).toMatch(/\.message-header[^]*?\.header-actions\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap[^}]*white-space:\s*nowrap/s)
-    expect(styles).toMatch(/\.message-header[^]*?\.header-action-group\s*\{[^}]*display:\s*(?:inline-)?flex[^}]*align-items:\s*center[^}]*gap:\s*2px/s)
+    expect(styles).toMatch(/\.message-header[^]*?\.header-actions\s*\{[^}]*display:\s*flex/s)
   })
 
   it('keeps all six middle-header actions at the approved 44px target with token-owned states', () => {
@@ -606,12 +733,12 @@ describe('R6 compact Chat workbench contract', () => {
           <TitleBar showLogo={false} showWindowControls={false} />
           <ChatHeader
             session={{ username: 'alice', displayName: 'Alice', type: 1, unreadCount: 0, summary: '', sortTimestamp: 0, lastTimestamp: 0, lastMsgType: 1 }}
-            isGroupChat={false} standaloneSessionWindow={false} showGroupMembersPanel={false} showGroupSummaryPanel={false}
+            isGroupChat={false} standaloneSessionWindow={false} showGroupMembersPanel={false}
             showJumpPopover={calendarOpen} showInSessionSearch={searchOpen} showDetailPanel={false} aiGroupSummaryEnabled={false}
             shouldHideStandaloneDetailButton={false} isPrivateSnsSupported={false} isExportActionBusy={false}
             isCurrentSessionExporting={false} isPreparingExportDialog={false} isBatchTranscribing={false}
             isBatchDecrypting={false} isTriggeringSessionInsight={false} isRefreshingMessages={false}
-            isLoadingMessages={false} currentSessionId="alice" compactHeader={false} jumpCalendarWrapRef={createRef<HTMLDivElement>()}
+            isLoadingMessages={false} currentSessionId="alice" jumpCalendarWrapRef={createRef<HTMLDivElement>()}
             onTriggerSessionInsight={vi.fn()} onToggleGroupSummaryPanel={vi.fn()} onGroupAnalytics={vi.fn()}
             onToggleGroupMembersPanel={vi.fn()} onExportCurrentSession={vi.fn()} onOpenSnsTimeline={vi.fn()}
             onBatchTranscribe={vi.fn()} onBatchDecrypt={vi.fn()}
@@ -662,7 +789,7 @@ describe('R6 compact Chat workbench contract', () => {
       expect(chatPage).toContain(`aria-labelledby="${id}"`)
       expect(chatPage).toMatch(new RegExp(`id="${id}"[^>]*tabIndex=\\{-1\\}`))
     }
-    expect(chatPage.match(/<aside className="detail-panel/g)).toHaveLength(3)
+    expect(chatPage.match(/<aside[^>]*className="detail-panel/g)).toHaveLength(3)
     expect(chatPage.match(/aria-modal="false"/g)?.length).toBeGreaterThanOrEqual(3)
   })
 })

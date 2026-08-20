@@ -1,0 +1,292 @@
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: appDialogFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-mode="dark"] .app-dialog-overlay {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.app-dialog {
+  // 采用统一无缝的一体化卡片底色，彻底消除三截色块拼接的拼凑感
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  animation: appDialogScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &.app-dialog-sm {
+    max-width: 440px;
+  }
+
+  &.app-dialog-md {
+    max-width: 560px;
+  }
+
+  &.app-dialog-lg {
+    max-width: 760px;
+  }
+
+  &.app-dialog-xl {
+    max-width: 920px;
+  }
+
+  // 头部：与弹窗背景完全融合一体
+  .app-dialog-header {
+    flex-shrink: 0;
+    padding: 22px 24px 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    background: transparent;
+    border-bottom: none;
+
+    .app-dialog-header-text {
+      min-width: 0;
+      flex: 1;
+
+      .app-dialog-title {
+        font-size: 17px;
+        line-height: 1.35;
+        font-weight: 650;
+        color: var(--text-primary);
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+
+      .app-dialog-subtitle {
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text-secondary);
+        margin: 8px 0 0 0;
+      }
+    }
+
+    .app-dialog-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+      flex-shrink: 0;
+      margin-top: -3px;
+      margin-right: -4px;
+
+      &:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      svg {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  // 警示/确认弹窗头部特别增强
+  &[role="alertdialog"] {
+    .app-dialog-header {
+      padding-bottom: 6px;
+    }
+
+    .app-dialog-title {
+      font-size: 17.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .app-dialog-subtitle {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+  }
+
+  // 筛选/过滤区
+  .app-dialog-filters {
+    flex-shrink: 0;
+    padding: 12px 24px;
+    background: transparent;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  // 内容区：统一无缝背景
+  .app-dialog-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 24px 16px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  // 底部：与弹窗背景完全融合一体，不再有死灰底色或硬边分割
+  .app-dialog-footer {
+    flex-shrink: 0;
+    padding: 16px 24px 22px;
+    background: transparent;
+    border-top: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+
+    button {
+      height: 36px;
+      min-height: 36px;
+      padding: 0 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+      outline: none;
+
+      &:hover:not(:disabled) {
+        background: var(--bg-hover);
+        border-color: color-mix(in srgb, var(--border-color) 75%, var(--text-secondary));
+        color: var(--text-primary);
+        transform: translateY(-0.5px);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      // 主题主要操作按钮
+      &.omnimind-primary-action,
+      &.primary-btn,
+      &[type="submit"] {
+        background: var(--primary) !important;
+        color: var(--on-primary, #ffffff) !important;
+        border: 1px solid var(--primary) !important;
+        box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 28%, transparent);
+
+        &:hover:not(:disabled) {
+          background: color-mix(in srgb, var(--primary) 86%, #000000) !important;
+          border-color: color-mix(in srgb, var(--primary) 86%, #000000) !important;
+          color: var(--on-primary, #ffffff) !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 36%, transparent);
+        }
+      }
+
+      // 危险操作按钮（如“确认结束托管”、“放弃更改”）
+      &.omnimind-danger,
+      &.home-danger-action,
+      &.danger-btn,
+      &.danger-pill {
+        background: var(--danger) !important;
+        color: #ffffff !important;
+        border: 1px solid var(--danger) !important;
+        box-shadow: 0 2px 8px color-mix(in srgb, var(--danger) 28%, transparent);
+
+        &:hover:not(:disabled) {
+          background: color-mix(in srgb, var(--danger) 86%, #000000) !important;
+          border-color: color-mix(in srgb, var(--danger) 86%, #000000) !important;
+          color: #ffffff !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px color-mix(in srgb, var(--danger) 36%, transparent);
+        }
+      }
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+      }
+    }
+  }
+
+  // 针对有大型滚动内容的面板（如多 tab 设置弹窗）设置柔和分割线
+  &.app-dialog-lg,
+  &.app-dialog-xl {
+    .app-dialog-header {
+      border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+      padding-bottom: 14px;
+    }
+
+    .app-dialog-footer {
+      border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+      padding-top: 14px;
+    }
+  }
+}
+
+[data-mode="dark"] .app-dialog {
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-height: 700px) {
+  .app-dialog-overlay {
+    padding: 12px;
+  }
+
+  .app-dialog {
+    max-height: calc(100vh - 24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-dialog-overlay,
+  .app-dialog {
+    animation: none;
+  }
+}
+
+@keyframes appDialogFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes appDialogScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

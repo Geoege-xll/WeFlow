@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { APP_IDENTITY } from '../../shared/app-identity'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { writeFile } from 'fs/promises'
 
@@ -26,7 +27,7 @@ export class CacheMapStore {
   private persistDirty = false
 
   constructor(userDataPath: string) {
-    this.filePath = join(userDataPath, 'WeFlow-cache-maps.json')
+    this.filePath = join(userDataPath, APP_IDENTITY.cacheMapFileName)
     this.load()
     app?.once?.('will-quit', () => this.flushSync())
   }

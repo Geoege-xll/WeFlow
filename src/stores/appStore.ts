@@ -4,7 +4,6 @@ export interface AppState {
   // 数据库状态
   isDbConnected: boolean
   dbPath: string | null
-  myWxid: string | null
 
   // 加载状态
   isLoading: boolean
@@ -23,7 +22,6 @@ export interface AppState {
 
   // 操作
   setDbConnected: (connected: boolean, path?: string) => void
-  setMyWxid: (wxid: string) => void
   setLoading: (loading: boolean, text?: string) => void
 
   // 更新操作
@@ -43,7 +41,6 @@ export interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   isDbConnected: false,
   dbPath: null,
-  myWxid: null,
   isLoading: false,
   loadingText: '',
   isLocked: false,
@@ -59,8 +56,6 @@ export const useAppStore = create<AppState>((set) => ({
     isDbConnected: connected,
     dbPath: path ?? null
   }),
-
-  setMyWxid: (wxid) => set({ myWxid: wxid }),
 
   setLoading: (loading, text) => set({
     isLoading: loading,
@@ -78,7 +73,6 @@ export const useAppStore = create<AppState>((set) => ({
   reset: () => set({
     isDbConnected: false,
     dbPath: null,
-    myWxid: null,
     isLoading: false,
     loadingText: '',
     isLocked: false,

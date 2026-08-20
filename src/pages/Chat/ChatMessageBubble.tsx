@@ -22,6 +22,7 @@ export interface ChatMessageBubbleProps {
   isGroupChat?: boolean
   resolvedSenderName?: string
   avatarProfile?: MessageAvatarProfile
+  showAvatar?: boolean
   isSelectionMode?: boolean
   isSelected?: boolean
   onContextMenu?: (event: React.MouseEvent, message: Message) => void
@@ -67,6 +68,7 @@ function ChatMessageBubble({
   isGroupChat,
   resolvedSenderName,
   avatarProfile,
+  showAvatar = true,
   isSelectionMode,
   isSelected,
   onContextMenu,
@@ -104,15 +106,20 @@ function ChatMessageBubble({
           onContextMenu={(event) => onContextMenu?.(event, message)}
         >
           <div
-            className="bubble-avatar"
+            className="message-avatar-slot"
             onContextMenu={(event) => {
-              if (!avatarProfile || isSystem) return
+              if (!showAvatar || !avatarProfile || isSystem) return
               event.preventDefault()
               event.stopPropagation()
               onAvatarContextMenu?.(event, message, avatarProfile)
             }}
           >
-            <Avatar src={avatarUrl} name={avatarName} size={36} className="bubble-avatar" />
+            <Avatar
+              src={avatarUrl}
+              name={avatarName}
+              size={36}
+              className={`message-avatar ${showAvatar ? '' : 'is-hidden'}`}
+            />
           </div>
           <div className="bubble-body">
             {isGroupChat && !isSent && (
@@ -160,6 +167,7 @@ function areEqual(prev: ChatMessageBubbleProps, next: ChatMessageBubbleProps) {
     prev.isGroupChat === next.isGroupChat &&
     prev.resolvedSenderName === next.resolvedSenderName &&
     prev.avatarProfile === next.avatarProfile &&
+    prev.showAvatar === next.showAvatar &&
     prev.isSelectionMode === next.isSelectionMode &&
     prev.isSelected === next.isSelected &&
     prev.onContextMenu === next.onContextMenu &&

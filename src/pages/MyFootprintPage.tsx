@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, AtSign, CheckCircle2, Download, Loader2, MessageCircle, RefreshCw, Sparkles, Users } from 'lucide-react'
 import DateRangePicker from '../components/DateRangePicker'
-import { WeFlowCard, WeFlowDialog, WeFlowSearch } from '../components/common'
+import { AppCard, AppDialog, AppSearch } from '../components/common'
 import './MyFootprintPage.scss'
 
 type RangePreset = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'custom'
@@ -712,7 +712,7 @@ function MyFootprintPage() {
           )}
 
           <div className="toolbar-actions">
-            <WeFlowSearch
+            <AppSearch
               value={searchKeyword}
               onChange={setSearchKeyword}
               placeholder="搜索联系人/群聊/内容"
@@ -763,36 +763,36 @@ function MyFootprintPage() {
       ) : (
         <>
           <section className="kpi-grid">
-            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
+            <AppCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
               <span className="kpi-label">收到消息的人数</span>
               <strong>{data.summary.private_inbound_people}</strong>
               <small>回复了其中 {data.summary.private_replied_people} 人</small>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
+            </AppCard>
+            <AppCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('private')}>
               <span className="kpi-label">发送消息的人数</span>
               <strong>{data.summary.private_outbound_people}</strong>
               <small>回复率 {formatPercent(data.summary.private_reply_rate)}</small>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
+            </AppCard>
+            <AppCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
               <span className="kpi-label">@我次数</span>
               <strong>{data.summary.mention_count}</strong>
               <small>可点击查看原消息</small>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
+            </AppCard>
+            <AppCard hoverElastic className="kpi-card" onClick={() => setTimelineMode('mention')}>
               <span className="kpi-label">涉及群聊</span>
               <strong>{data.summary.mention_group_count}</strong>
               <small>按群聚合 @我消息</small>
-            </WeFlowCard>
+            </AppCard>
           </section>
 
           {footprintAiStatus !== 'idle' && (
-            <WeFlowCard className={`footprint-ai-result footprint-ai-result-${footprintAiStatus}`}>
+            <AppCard className={`footprint-ai-result footprint-ai-result-${footprintAiStatus}`}>
               <div className="footprint-ai-head">
                 <strong>AI 足迹总结</strong>
                 <span>{currentRange.label}</span>
               </div>
               <p>{footprintAiText}</p>
-            </WeFlowCard>
+            </AppCard>
           )}
 
           <section
@@ -940,7 +940,7 @@ function MyFootprintPage() {
           </section>
         </>
       )}
-      <WeFlowDialog
+      <AppDialog
         open={exportModalStatus !== 'idle'}
         onClose={() => {
           if (exportModalStatus !== 'progress') {
@@ -979,7 +979,7 @@ function MyFootprintPage() {
           <p>{exportModalDescription}</p>
           {exportModalPath && <code className="export-modal-path">{exportModalPath}</code>}
         </div>
-      </WeFlowDialog>
+      </AppDialog>
     </div>
   )
 }

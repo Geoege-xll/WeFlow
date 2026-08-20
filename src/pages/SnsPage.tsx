@@ -9,7 +9,7 @@ import { ContactSnsTimelineDialog } from '../components/Sns/ContactSnsTimelineDi
 import type { ContactSnsTimelineTarget } from '../components/Sns/contactSnsTimeline'
 import JumpToDatePopover from '../components/JumpToDatePopover'
 import { ExportDateRangeDialog } from '../components/Export/ExportDateRangeDialog'
-import { WeFlowCard, WeFlowDialog } from '../components/common'
+import { AppCard, AppDialog } from '../components/common'
 import * as configService from '../services/config'
 import {
     finishBackgroundTask,
@@ -2075,7 +2075,6 @@ export default function SnsPage() {
                 <div className="sns-feed-container">
                     <div className="feed-header">
                         <div className="feed-header-main">
-                            <h2>朋友圈</h2>
                             <div className={`feed-stats-line ${overviewStatsStatus}`}>
                                 <span className="feed-overview-total">
                                     {overviewStatsStatus === 'loading'
@@ -2312,7 +2311,7 @@ export default function SnsPage() {
             />
 
             {debugPost && (
-                <WeFlowDialog
+                <AppDialog
                     open={Boolean(debugPost)}
                     onClose={() => setDebugPost(null)}
                     title="原始数据"
@@ -2320,11 +2319,11 @@ export default function SnsPage() {
                     <pre className="json-code">
                         {JSON.stringify(debugPost, null, 2)}
                     </pre>
-                </WeFlowDialog>
+                </AppDialog>
             )}
 
             {showCacheMigrationDialog && cacheMigrationStatus && (
-                <WeFlowDialog
+                <AppDialog
                     open={showCacheMigrationDialog}
                     onClose={() => !cacheMigrationRunning && setShowCacheMigrationDialog(false)}
                     title="发现旧版朋友圈缓存"
@@ -2414,16 +2413,16 @@ export default function SnsPage() {
                             </div>
                         )}
                     </div>
-                </WeFlowDialog>
+                </AppDialog>
             )}
 
             {/* 朋友圈防删除插件对话框 */}
             {showTriggerDialog && (
-                <WeFlowDialog
+                <AppDialog
                     open={showTriggerDialog}
                     onClose={() => { setShowTriggerDialog(false); setTriggerMessage(null) }}
                     title="朋友圈防删除"
-                    subtitle="启用后，WeFlow将拦截朋友圈删除操作，已同步动态不会在本地消失"
+                    subtitle="启用后，OmniMindWeChat将拦截朋友圈删除操作，已同步动态不会在本地消失"
                     footer={
                         <div className="sns-protect-actions">
                             {!triggerInstalled ? (
@@ -2500,12 +2499,12 @@ export default function SnsPage() {
                             <span>{triggerMessage.text}</span>
                         </div>
                     )}
-                </WeFlowDialog>
+                </AppDialog>
             )}
 
             {/* 导出对话框 */}
             {showExportDialog && (
-                <WeFlowDialog
+                <AppDialog
                     open={showExportDialog}
                     onClose={() => !isExportLocked && setShowExportDialog(false)}
                     title="导出朋友圈"
@@ -2768,7 +2767,7 @@ export default function SnsPage() {
                             </div>
                         )}
                     </div>
-                </WeFlowDialog>
+                </AppDialog>
             )}
 
             <ExportDateRangeDialog

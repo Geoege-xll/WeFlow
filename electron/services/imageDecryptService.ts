@@ -11,6 +11,7 @@ import {
   decryptDatViaNativeAsync,
   nativeAddonLocation
 } from './nativeImageDecrypt'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 // 获取 ffmpeg-static 的路径
 function getStaticFfmpegPath(): string | null {
@@ -118,7 +119,7 @@ export class ImageDecryptService {
   private shouldEmitImageEvents(payload?: { suppressEvents?: boolean }): boolean {
     if (payload?.suppressEvents === true) return false
     // 导出 worker 场景不需要向渲染层广播逐条图片事件，避免事件风暴拖慢主界面。
-    if (process.env.WEFLOW_WORKER === '1') return false
+    if (process.env.OMNIMIND_WECHAT_WORKER === '1') return false
     return true
   }
 
@@ -1945,7 +1946,7 @@ export class ImageDecryptService {
       const configured = this.configService.get('cachePath')
       root = configured
         ? join(configured, 'Images')
-        : join(this.getDocumentsPath(), 'WeFlow', 'Images')
+        : join(this.getDocumentsPath(), APP_IDENTITY.documentsDirectoryName, 'Images')
       this.cacheRootPath = root
     }
     this.ensureDir(root)
@@ -2484,7 +2485,7 @@ export class ImageDecryptService {
     const ffmpeg = this.getFfmpegPath()
     this.logInfo('ffmpeg 转换开始', { ffmpegPath: ffmpeg, hevcSize: hevcData.length })
 
-    const tmpDir = join(this.getTempPath(), 'weflow_hevc')
+    const tmpDir = join(this.getTempPath(), 'omnimind_wechat_hevc')
     if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true })
     const uniqueId = `${process.pid}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
     const tmpInput = join(tmpDir, `hevc_${uniqueId}.hevc`)
@@ -2677,7 +2678,7 @@ export class ImageDecryptService {
   }
 
   private getUserDataPath(): string {
-    const workerUserDataPath = String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+    const workerUserDataPath = String(process.env.OMNIMIND_WECHAT_USER_DATA_PATH || process.env.OMNIMIND_WECHAT_CONFIG_CWD || '').trim()
     if (workerUserDataPath) return workerUserDataPath
     return this.getElectronPath('userData') || process.cwd()
   }
@@ -2707,7 +2708,7 @@ export class ImageDecryptService {
     const configured = this.configService.get('cachePath')
     const root = configured
       ? join(configured, 'Images')
-      : join(this.getDocumentsPath(), 'WeFlow', 'Images')
+      : join(this.getDocumentsPath(), APP_IDENTITY.documentsDirectoryName, 'Images')
 
     try {
       if (!existsSync(root)) {

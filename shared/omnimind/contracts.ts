@@ -1,4 +1,6 @@
-export const OMNIMIND_RUNTIME_STATES = ['stopped', 'validating', 'starting', 'running', 'degraded', 'stopping', 'failed'] as const
+// paused 是主进程持久快照中的正式运行态：它表示队列上下文仍在，但新的消息接入已被阻断。
+// 不能在 renderer 侧用临时 boolean 模拟，否则刷新页面后会错误地把“暂停”当成“停止”。
+export const OMNIMIND_RUNTIME_STATES = ['stopped', 'validating', 'starting', 'running', 'paused', 'degraded', 'stopping', 'failed'] as const
 export type OmniMindRuntimeState = typeof OMNIMIND_RUNTIME_STATES[number]
 
 export const OMNIMIND_PERMISSION_KINDS = ['accessibility', 'automation'] as const
@@ -20,88 +22,61 @@ export type OmniMindTaskState = typeof OMNIMIND_TASK_STATES[number]
 export const OMNIMIND_FAILURE_STAGES = ['generation', 'authorization', 'verification_baseline', 'automation', 'verification_postsend', 'cleanup', 'runtime_logging'] as const
 export type OmniMindFailureStage = typeof OMNIMIND_FAILURE_STAGES[number]
 
+/**
+ * Python Open Chat 允许 OmniMindWeChat 消费的公开失败码白名单。
+ *
+ * 这些值只描述可安全公开、且会直接影响队列重试策略的状态。服务端响应中的 message、
+ * detail、异常栈或任意扩展字段都不进入客户端合同，避免把模型输入、画像或内部错误正文
+ * 带入 Electron 状态快照。新增失败码必须先在两端合同中明确约定，不能在运行时透传。
+ */
+export const OMNIMIND_OPEN_CHAT_FAILURE_CODES = [
+  'execution_result_unknown',
+  'credential_revoked',
+  'retry_exhausted',
+  'invalid_persisted_request',
+  'duplicate_external_message',
+  'generation_timeout',
+  'service_unavailable'
+] as const
+export type OmniMindOpenChatFailureCode = typeof OMNIMIND_OPEN_CHAT_FAILURE_CODES[number]
+
 export interface OmniMindSendResult {
   success: boolean
   error?: string
   stage?: OmniMindFailureStage
 }
 
-export interface ManagedConversation { sessionId: string; displayName: string }
-export type ManagedScope =
-  | { mode: 'selected'; conversations: ManagedConversation[] }
-  | { mode: 'all'; confirmedAt: number }
+export type { ManagedConversation, ManagedScope } from './conversation-domain'
+export { isManagedSession, parseManagedScope } from './conversation-domain'
+import type { ManagedScope } from './conversation-domain'
 
 export interface OmniMindSettings {
-  schemaVersion: 2
+  schemaVersion: 4
   pythonBaseUrl: string
   managedScope: ManagedScope
   autoSend: boolean
-  ignoreOfficial: boolean
   hasApiKey: boolean
   batchWindowMs: number
-  requestTimeoutMs: number
   migrationNotice?: 'scope_confirmation_required'
 }
 
 export interface OmniMindSettingsInput {
-  schemaVersion: 2
+  schemaVersion: 4
   pythonBaseUrl: string
   managedScope: ManagedScope
   autoSend: boolean
-  ignoreOfficial: boolean
   apiKeyDraft?: string
-  clearApiKey?: boolean
   batchWindowMs: number
-  requestTimeoutMs: number
 }
 
-export const isCriticalSettingsChange = (previous: OmniMindSettings, draft: OmniMindSettingsInput): boolean =>
-  previous.pythonBaseUrl !== draft.pythonBaseUrl ||
-  Boolean(draft.apiKeyDraft?.trim()) || Boolean(draft.clearApiKey) ||
-  JSON.stringify(previous.managedScope) !== JSON.stringify(draft.managedScope) ||
-  previous.ignoreOfficial !== draft.ignoreOfficial
-
-export const normalizeOmniMindBaseUrl = (value: string): string => {
-  let url: URL
-  try { url = new URL(value.trim()) } catch { throw new Error('invalid_base_url') }
-  if (url.username || url.password || url.search || url.hash) throw new Error('invalid_base_url')
-  const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname.toLowerCase())
-  if (!((url.protocol === 'http:' && loopback) || url.protocol === 'https:')) throw new Error('invalid_base_url')
-  if (!url.hostname || (url.port && (!/^\d+$/.test(url.port) || Number(url.port) > 65535))) throw new Error('invalid_base_url')
-  const marker = '/api/v1/open'
-  const markerIndex = url.pathname.toLowerCase().indexOf(marker)
-  url.pathname = markerIndex >= 0 ? url.pathname.slice(0, markerIndex) + marker : url.pathname.replace(/\/+$/, '') + marker
-  url.search = ''
-  url.hash = ''
-  return url.toString().replace(/\/$/, '')
-}
-
-export const isLocalOmniMindEndpoint = (value: string): boolean => {
-  try { return normalizeOmniMindBaseUrl(value).startsWith('http://') } catch { return false }
-}
-
-export const parseManagedScope = (value: unknown): ManagedScope => {
-  const record = strictRecord(value, ['mode', 'conversations', 'confirmedAt'], 'managed scope')
-  if (record.mode === 'all') {
-    if (record.conversations !== undefined || typeof record.confirmedAt !== 'number' || !Number.isFinite(record.confirmedAt) || record.confirmedAt <= 0) throw new Error('Invalid managed scope payload')
-    return { mode: 'all', confirmedAt: record.confirmedAt }
-  }
-  if (record.mode !== 'selected' || record.confirmedAt !== undefined || !Array.isArray(record.conversations) || record.conversations.length === 0) throw new Error('Invalid managed scope payload')
-  const conversations: ManagedConversation[] = []
-  const seen = new Set<string>()
-  for (const item of record.conversations) {
-    const conversation = strictRecord(item, ['sessionId', 'displayName'], 'managed conversation')
-    const sessionId = requiredString(conversation, 'sessionId', 'managed conversation')
-    const identity = sessionId.toLocaleLowerCase()
-    if (seen.has(identity)) continue
-    seen.add(identity)
-    conversations.push({ sessionId, displayName: typeof conversation.displayName === 'string' ? conversation.displayName.trim() : '' })
-  }
-  return { mode: 'selected', conversations }
-}
-
-export const isManagedSession = (scope: ManagedScope, sessionId: string): boolean =>
-  scope.mode === 'all' || scope.conversations.some((conversation) => conversation.sessionId.trim().toLocaleLowerCase() === sessionId.trim().toLocaleLowerCase())
+export {
+  isCriticalSettingsChange,
+  isLocalOmniMindEndpoint,
+  normalizeOmniMindBaseUrl,
+  parseOmniMindTimings,
+  parseSettingsPayload,
+  parseTestConnectionPayload
+} from './settings-domain'
 
 export interface OmniMindTask {
   id: string
@@ -109,6 +84,14 @@ export interface OmniMindTask {
   sessionId: string
   sessionName: string
   sessionType?: NormalizedMessageEvent['sessionType']
+  /**
+   * 仅在 Electron main 的队列内部流转的原始入站事件。
+   *
+   * messageKey 可能包含本地数据库定位信息，因此绝不能进入 Renderer 快照、日志或网络请求；
+   * Python client 必须先对它做 SHA-256，再构造公开协议中的 messages[].external_id。
+   * 保留逐条事件而不是只保存拼接文本，是为了让群聊 sender、消息时间和幂等身份不在批处理中丢失。
+   */
+  inboundMessages: NormalizedMessageEvent[]
   messageKeys: string[]
   text: string
   status: OmniMindTaskState
@@ -149,6 +132,13 @@ export interface NormalizedMessageEvent {
   messageType: number
   contentType: 'text' | 'image' | 'voice' | 'video' | 'emoji' | 'location' | 'contact' | 'file' | 'link' | 'other'
   sessionName?: string
+  /**
+   * 入站消息的可证明发送者标识。私聊由联系人 sessionId 提供；群聊只能来自消息行的
+   * senderUsername，缺失时必须保持 undefined，不能回退为 chatroom sessionId。
+   */
+  senderExternalId?: string
+  /** 发送者展示名只用于 profile 外部观察事实；它不能替代 senderExternalId 建立客户身份。 */
+  senderDisplayName?: string
 }
 
 type RecordValue = Record<string, unknown>
@@ -193,41 +183,6 @@ export const parseManualSendPayload = (value: unknown): { sessionId: string; tex
   return { sessionId, text: record.text }
 }
 
-export const parseSettingsPayload = (value: unknown): OmniMindSettingsInput => {
-  const record = strictRecord(value, ['schemaVersion', 'pythonBaseUrl', 'managedScope', 'autoSend', 'ignoreOfficial', 'apiKeyDraft', 'clearApiKey', 'batchWindowMs', 'requestTimeoutMs'], 'settings')
-  if (record.schemaVersion !== 2 || typeof record.autoSend !== 'boolean' || typeof record.ignoreOfficial !== 'boolean') throw new Error('Invalid settings payload')
-  const pythonBaseUrl = normalizeOmniMindBaseUrl(requiredString(record, 'pythonBaseUrl', 'settings'))
-  const managedScope = parseManagedScope(record.managedScope)
-  const { batchWindowMs, requestTimeoutMs } = parseOmniMindTimings(record.batchWindowMs, record.requestTimeoutMs)
-  const result: OmniMindSettingsInput = {
-    schemaVersion: 2, pythonBaseUrl, managedScope,
-    autoSend: record.autoSend, ignoreOfficial: record.ignoreOfficial,
-    batchWindowMs: Number(batchWindowMs),
-    requestTimeoutMs: Number(requestTimeoutMs)
-  }
-  if (record.apiKeyDraft !== undefined) {
-    if (typeof record.apiKeyDraft !== 'string' || !record.apiKeyDraft.trim()) throw new Error('Invalid settings payload')
-    result.apiKeyDraft = record.apiKeyDraft
-  }
-  if (record.clearApiKey !== undefined) {
-    if (typeof record.clearApiKey !== 'boolean') throw new Error('Invalid settings payload')
-    result.clearApiKey = record.clearApiKey
-  }
-  if (result.apiKeyDraft && result.clearApiKey) throw new Error('Invalid settings payload')
-  return result
-}
-
-export const parseOmniMindTimings = (batchValue: unknown = 2000, timeoutValue: unknown = 15000): { batchWindowMs: number; requestTimeoutMs: number } => {
-  if (!Number.isInteger(batchValue) || Number(batchValue) < 500 || Number(batchValue) > 10000) throw new Error('Invalid settings payload')
-  if (!Number.isInteger(timeoutValue) || Number(timeoutValue) < 1000 || Number(timeoutValue) > 120000) throw new Error('Invalid settings payload')
-  return { batchWindowMs: Number(batchValue), requestTimeoutMs: Number(timeoutValue) }
-}
-
-export const parseTestConnectionPayload = (value: unknown): { pythonBaseUrl: string; apiKeyDraft?: string } => {
-  const record = strictRecord(value, ['pythonBaseUrl', 'apiKeyDraft'], 'test connection')
-  const result: { pythonBaseUrl: string; apiKeyDraft?: string } = { pythonBaseUrl: normalizeOmniMindBaseUrl(requiredString(record, 'pythonBaseUrl', 'test connection')) }
-  if (record.apiKeyDraft !== undefined) result.apiKeyDraft = requiredString(record, 'apiKeyDraft', 'test connection')
-  return result
-}
-
 export const parseTaskActionPayload = parseCancelTaskPayload
+// 语义上与其他 task action 相同，但保留显式命名，避免 IPC 层误用宽泛或 renderer 可控的发送载荷。
+export const parseConfirmDeliveryPayload = parseCancelTaskPayload

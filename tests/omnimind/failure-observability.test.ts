@@ -99,6 +99,26 @@ describe('delivery failure observability', () => {
     expect(persisted).not.toContain('raw customer text')
   })
 
+  it.each([
+    'permission_status_unknown',
+    'wechat_process_unavailable', 'wechat_window_unavailable', 'wechat_window_ambiguous',
+    'wechat_window_recovery_failed', 'wechat_window_recovery_timeout',
+    'search_open_failed', 'search_field_unavailable', 'search_field_ambiguous', 'search_input_failed',
+    'conversation_title_unavailable', 'target_ambiguous', 'search_result_click_failed', 'target_mismatch',
+    'input_unavailable', 'input_ambiguous', 'input_click_failed', 'input_paste_failed', 'input_submit_failed'
+  ])('对当前稳定自动化原因 %s 做新旧诊断 round-trip', async (reason) => {
+    let persisted = JSON.stringify([{ timestamp: 1, correlationId: 'old-id', stage: 'automation', terminalState: 'send_failed', reason }])
+    const store = new DeliveryDiagnosticStore({
+      read: async () => persisted,
+      writeAtomic: async (value) => { persisted = value },
+      now: () => 2
+    })
+
+    await store.record({ correlationId: 'new-id', stage: 'automation', terminalState: 'send_failed', reason })
+
+    expect(JSON.parse(persisted).map((entry: { reason: string }) => entry.reason)).toEqual([reason, reason])
+  })
+
   it('replaces an unsafe correlation ID before the first persistence', async () => {
     let persisted = ''
     const store = new DeliveryDiagnosticStore({
@@ -201,7 +221,7 @@ describe('delivery failure observability', () => {
   })
 
   it('atomically replaces the diagnostic file with mode 0600 in an isolated temporary directory', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-delivery-diagnostics-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-delivery-diagnostics-'))
     try {
       const target = path.join(directory, 'delivery-diagnostics.json')
       const file = createAtomicDiagnosticFile(target, { processId: 42, createTemporaryId: () => 'replacement' })
@@ -222,7 +242,7 @@ describe('delivery failure observability', () => {
   })
 
   it('retries an exclusive temp collision without modifying or deleting the existing file', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-delivery-collision-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-delivery-collision-'))
     try {
       const target = path.join(directory, 'delivery-diagnostics.json')
       const collision = path.join(directory, '.delivery-diagnostics.json.42.collision.tmp')
@@ -241,7 +261,7 @@ describe('delivery failure observability', () => {
   })
 
   it('does not follow or unlink a colliding symlink while retrying', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-delivery-symlink-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-delivery-symlink-'))
     try {
       const target = path.join(directory, 'delivery-diagnostics.json')
       const protectedFile = path.join(directory, 'protected.txt')
@@ -263,7 +283,7 @@ describe('delivery failure observability', () => {
   })
 
   it('fails safely after bounded temp collisions without changing target or collision', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'weflow-delivery-bounded-collision-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'omnimind-wechat-delivery-bounded-collision-'))
     try {
       const target = path.join(directory, 'delivery-diagnostics.json')
       const collision = path.join(directory, '.delivery-diagnostics.json.42.collision.tmp')

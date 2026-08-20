@@ -135,15 +135,15 @@ parentPort?.on('message', (message: any) => {
   }
 })
 
-process.env.WEFLOW_WORKER = '1'
+process.env.OMNIMIND_WECHAT_WORKER = '1'
 if (config.resourcesPath) {
   process.env.WCDB_RESOURCES_PATH = config.resourcesPath
 }
 if (config.userDataPath) {
-  process.env.WEFLOW_USER_DATA_PATH = config.userDataPath
-  process.env.WEFLOW_CONFIG_CWD = config.userDataPath
+  process.env.OMNIMIND_WECHAT_USER_DATA_PATH = config.userDataPath
+  process.env.OMNIMIND_WECHAT_CONFIG_CWD = config.userDataPath
 }
-process.env.WEFLOW_PROJECT_NAME = process.env.WEFLOW_PROJECT_NAME || 'WeFlow'
+process.env.OMNIMIND_WECHAT_PROJECT_NAME = process.env.OMNIMIND_WECHAT_PROJECT_NAME || 'OmniMindWeChat'
 
 // 消息导出强制走 WeLive 引擎（不提供 legacy 回退开关）；
 // 仅联系人导出仍由 worker 内置流程处理。
@@ -274,7 +274,7 @@ async function runWeliveEngine() {
     ? [String(config.sessionId || '').trim()].filter(Boolean)
     : (Array.isArray(config.sessionIds) ? config.sessionIds : []).map((id) => String(id || '').trim()).filter(Boolean)
   const outputDir = String(config.outputDir || (config.outputPath ? path.dirname(config.outputPath) : '') || '').trim()
-  const rawRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'weflow-welive-raw-'))
+  const rawRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omnimind-wechat-welive-raw-'))
 
   exportService.setRuntimeConfig({
     dbPath: config.dbPath,

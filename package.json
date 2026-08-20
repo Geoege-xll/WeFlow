@@ -1,7 +1,7 @@
 {
-  "name": "weflow",
+  "name": "omnimind-wechat",
   "version": "5.0.0",
-  "description": "WeFlow",
+  "description": "OmniMindWeChat",
   "main": "dist-electron/main.js",
   "author": {
     "name": "cc",
@@ -9,22 +9,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hicccc77/WeFlow"
+    "url": "https://github.com/Geoege-xll/WeFlow"
   },
-  "//": "二改不应改变此处的作者与应用信息",
+  "//": "保留原作者与许可证归属；产品身份由 shared/app-identity.ts 统一定义。",
   "scripts": {
     "test": "vitest run",
     "postinstall": "electron-builder install-app-deps && node scripts/prepare-electron-runtime.cjs",
     "rebuild": "electron-rebuild",
     "dev": "node scripts/prepare-electron-runtime.cjs && vite",
-    "typecheck": "tsc --noEmit",
-    "build": "node scripts/clean-dist-electron.cjs && tsc && vite build && electron-builder",
+    "typecheck": "node ../scripts/sync-omnimind-automatic-hosting-policy.mjs --check && tsc --noEmit",
+    "build": "node ../scripts/sync-omnimind-automatic-hosting-policy.mjs --check && node scripts/clean-dist-electron.cjs && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "node scripts/prepare-electron-runtime.cjs && vite --mode electron",
     "electron:build": "npm run build"
   },
   "dependencies": {
     "@hicccc77/electron-liquid-glass": "^0.3.0",
+    "@types/three": "^0.185.4",
     "@vscode/sudo-prompt": "^9.3.2",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",
@@ -46,6 +47,7 @@
     "remark-gfm": "^4.0.1",
     "sherpa-onnx-node": "^1.13.3",
     "silk-wasm": "^3.7.1",
+    "three": "^0.185.1",
     "wechat-emojis": "^1.0.2",
     "zustand": "^5.0.14"
   },
@@ -81,14 +83,14 @@
     }
   },
   "build": {
-    "appId": "com.WeFlow.app",
+    "appId": "com.omnimind.wechat",
     "publish": {
       "provider": "github",
-      "owner": "hicccc77",
+      "owner": "Geoege-xll",
       "repo": "WeFlow",
       "releaseType": "release"
     },
-    "productName": "WeFlow",
+    "productName": "OmniMindWeChat",
     "artifactName": "${productName}-${version}-Setup.${ext}",
     "directories": {
       "output": "release"
@@ -107,7 +109,7 @@
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
       "extendInfo": {
-        "NSAppleEventsUsageDescription": "仅当你启用 OmniMind 自动托管时，WeFlow 才会通过“系统事件”使用 Apple Events，以辅助完成你确认的自动回复操作。"
+        "NSAppleEventsUsageDescription": "仅当你启用 OmniMind 自动托管时，OmniMindWeChat 才会通过“系统事件”使用 Apple Events，以辅助完成你确认的自动回复操作。"
       },
       "icon": "resources/icons/macos/icon.icns",
       "extraResources": [
@@ -186,8 +188,8 @@
         "tar.gz"
       ],
       "category": "Utility",
-      "executableName": "weflow",
-      "synopsis": "WeFlow for Linux",
+      "executableName": "omnimind-wechat",
+      "synopsis": "OmniMindWeChat for Linux",
       "extraFiles": [
         {
           "from": "resources/installer/linux/install.sh",

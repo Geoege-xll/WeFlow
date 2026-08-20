@@ -46,8 +46,8 @@ export class ExportContext {
     public readonly exportStatsCacheTtlMs = 2 * 60 * 1000;
     public readonly exportAggregatedSessionStatsCacheTtlMs = 60 * 1000;
     public readonly exportStatsCacheMaxEntries = 16;
-    private readonly STOP_ERROR_CODE = 'WEFLOW_EXPORT_STOP_REQUESTED';
-    private readonly PAUSE_ERROR_CODE = 'WEFLOW_EXPORT_PAUSE_REQUESTED';
+    private readonly STOP_ERROR_CODE = 'OMNIMIND_WECHAT_EXPORT_STOP_REQUESTED';
+    private readonly PAUSE_ERROR_CODE = 'OMNIMIND_WECHAT_EXPORT_PAUSE_REQUESTED';
     private mediaFileCachePopulatePending = new Map<string, Promise<string | null>>();
     private mediaFileCacheReadyDirs = new Set<string>();
     private mediaExportTelemetry: MediaExportTelemetry | null = null;
@@ -4113,7 +4113,7 @@ export class ExportContext {
       _sessionName = '',
       _progressCurrent = 25
     ): Promise<void> {
-        // WeLive raw export owns media resolution. Weflow must not scan/copy original media here.
+        // WeLive raw export owns media resolution. OmniMindWeChat must not scan/copy original media here.
     }
 
     public collectMediaMessagesForExport(messages: any[], options: ExportOptions): any[] {
@@ -4422,7 +4422,7 @@ export class ExportContext {
         if (weliveCollected) {
           // WeLive 原始数据收集报错（文件缺失 / JSONL 解析失败）意味着数据不完整。
           // 调用方（各 formatter）不会检查 error 字段，这里必须直接抛错让会话导出失败，
-          // 禁止把截断或空结果当作成功输出（issue #1129 的 WeFlow 侧防线）。
+          // 禁止把截断或空结果当作成功输出（issue #1129 的 OmniMindWeChat 侧防线）。
           if (weliveCollected.error) {
             throw new Error(`WeLive 原始导出数据不完整: ${weliveCollected.error}`)
           }
@@ -5277,11 +5277,11 @@ export class ExportContext {
         }
     }
 
-    public getWeflowHeader(): { version: string; exportedAt: number; generator: string } {
+    public getOmniMindWeChatHeader(): { version: string; exportedAt: number; generator: string } {
         return {
           version: '1.0.3',
           exportedAt: Math.floor(Date.now() / 1000),
-          generator: 'WeFlow'
+          generator: 'OmniMindWeChat'
         }
     }
 
@@ -5293,7 +5293,7 @@ export class ExportContext {
           chatlab: {
             version: '0.0.2',
             exportedAt: Math.floor(Date.now() / 1000),
-            generator: 'WeFlow'
+            generator: 'OmniMindWeChat'
           },
           meta: {
             name: sessionInfo.displayName,
@@ -5391,7 +5391,7 @@ export class ExportContext {
 
           appendRow(['会话信息'])
           appendRow(['微信ID', sessionId, '昵称', sessionInfo.displayName || sessionId])
-          appendRow(['导出工具', 'WeFlow', '导出时间', formatTimestamp(Math.floor(Date.now() / 1000))])
+          appendRow(['导出工具', 'OmniMindWeChat', '导出时间', formatTimestamp(Math.floor(Date.now() / 1000))])
           appendRow([])
           appendRow(useCompactColumns
             ? ['序号', '时间', '发送者身份', '消息类型', '内容']

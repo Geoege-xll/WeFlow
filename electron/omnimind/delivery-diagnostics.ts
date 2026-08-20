@@ -172,8 +172,15 @@ interface DeliveryDiagnosticEntry {
 
 const SAFE_REASONS = new Set([
   'verification_baseline_failed', 'verification_read_failed', 'verification_unbounded', 'outbound_not_verified',
-  'clipboard_capture_failed', 'focus_capture_failed', 'accessibility_permission_denied', 'automation_permission_denied', 'target_ambiguous',
-  'target_mismatch', 'input_unavailable', 'input_ambiguous', 'automation_timeout', 'automation_failed',
+  'clipboard_capture_failed', 'focus_capture_failed', 'accessibility_permission_denied', 'automation_permission_denied', 'permission_status_unknown',
+  // 脚本只返回这些无用户数据的稳定码；新记录与旧诊断读回共用同一白名单，其他文本统一降级。
+  'wechat_process_unavailable', 'wechat_window_unavailable', 'wechat_window_ambiguous',
+  'wechat_window_recovery_failed', 'wechat_window_recovery_timeout',
+  'search_open_failed', 'search_field_unavailable', 'search_field_ambiguous', 'search_input_failed',
+  // 标题缺失与重名都只表达本地授权结论，不包含真实昵称、sessionId 或其他用户数据。
+  'conversation_title_unavailable', 'target_ambiguous', 'search_result_click_failed', 'target_mismatch',
+  'input_unavailable', 'input_ambiguous', 'input_click_failed', 'input_paste_failed', 'input_submit_failed',
+  'automation_timeout', 'automation_failed',
   'clipboard_restore_failed', 'focus_restore_failed', 'current_account_changed', 'current_settings_unavailable',
   'managed_scope_changed', 'official_account_filtered', 'api_key_unavailable', 'unknown_failure'
 ])

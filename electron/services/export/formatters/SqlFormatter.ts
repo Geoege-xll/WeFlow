@@ -211,7 +211,7 @@ export class SqlFormatter {
 
       await writeChunk([
         'BEGIN;',
-        'CREATE TABLE IF NOT EXISTS weflow_messages (',
+        'CREATE TABLE IF NOT EXISTS omnimind_wechat_messages (',
         '  session_id TEXT NOT NULL,',
         '  local_id TEXT,',
         '  message_id TEXT,',
@@ -223,7 +223,7 @@ export class SqlFormatter {
         '  content TEXT,',
         '  media_path TEXT',
         ');',
-        'CREATE INDEX IF NOT EXISTS idx_weflow_messages_session_time ON weflow_messages (session_id, create_time);',
+        'CREATE INDEX IF NOT EXISTS idx_omnimind_wechat_messages_session_time ON omnimind_wechat_messages (session_id, create_time);',
         ''
       ].join('\n'))
 
@@ -269,7 +269,7 @@ export class SqlFormatter {
         }
 
         writeBuffer.push(
-          `INSERT INTO weflow_messages (session_id, local_id, message_id, create_time, sender, is_send, local_type, media_type, content, media_path) VALUES (` +
+          `INSERT INTO omnimind_wechat_messages (session_id, local_id, message_id, create_time, sender, is_send, local_type, media_type, content, media_path) VALUES (` +
           [
             sqlString(sessionId),
             sqlNullableString(msg.localId ?? msg.local_id),

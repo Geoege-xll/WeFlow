@@ -44,6 +44,7 @@ import { sendOmniMindSnapshotToMainWindow } from './omnimind/snapshot-target'
 import { parseAccountConfigBundle, parseAccountConfigPatch } from '../shared/omnimind/account-bundle'
 import { registerOmniMindIpc } from './omnimind/register-omnimind-ipc'
 import { calculateInitialWindowBounds } from './windowGeometry'
+import { APP_IDENTITY } from '../shared/app-identity'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -424,7 +425,7 @@ const resetUpdaterProviderCache = () => {
 }
 
 const getUpdaterFeedUrlByTrack = (track: 'stable' | 'preview' | 'dev'): string => {
-  const repoBase = 'https://github.com/hicccc77/WeFlow/releases'
+  const repoBase = APP_IDENTITY.github.releasesUrl
   if (track === 'stable') return `${repoBase}/latest/download`
   if (track === 'preview') return `${repoBase}/download/nightly-preview`
   return `${repoBase}/download/nightly-dev`
@@ -487,7 +488,7 @@ const getSystemLaunchAtStartup = (): boolean => {
   try {
     return app.getLoginItemSettings().openAtLogin === true
   } catch (error) {
-    console.error('[WeFlow] 读取开机自启动状态失败:', error)
+    console.error('[OmniMindWeChat] 读取开机自启动状态失败:', error)
     return false
   }
 }
@@ -573,7 +574,7 @@ const syncLaunchAtStartupPreference = () => {
   const result = setSystemLaunchAtStartup(storedPreference)
   configService.set('launchAtStartup', result.enabled)
   if (!result.success && result.error) {
-    console.error('[WeFlow] 同步开机自启动设置失败:', result.error)
+    console.error('[OmniMindWeChat] 同步开机自启动设置失败:', result.error)
   }
 }
 
@@ -608,7 +609,7 @@ function sanitizePathEnv() {
   const filtered = parts.filter(isSafe)
   if (filtered.length !== parts.length) {
     const removed = parts.filter((p) => !isSafe(p))
-    console.warn('[WeFlow] 使用白名单裁剪 PATH，移除目录:', removed)
+    console.warn('[OmniMindWeChat] 使用白名单裁剪 PATH，移除目录:', removed)
     const nextPath = filtered.join(sep)
     process.env.PATH = nextPath
     process.env.Path = nextPath
@@ -1891,7 +1892,7 @@ const collectLegacySnsCacheMigrationPlan = async (): Promise<SnsCacheMigrationPl
 
   const legacyBaseDir = configService.getCacheBasePath()
   const configuredCachePath = String(configService.get('cachePath') || '').trim()
-  const currentBaseDir = configuredCachePath || join(app.getPath('documents'), 'WeFlow')
+  const currentBaseDir = configuredCachePath || join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
 
   if (!legacyBaseDir || !currentBaseDir) return null
 
@@ -2214,7 +2215,7 @@ function registerIpcHandlers() {
     if (isLaunchAtStartupSupported() && getSystemLaunchAtStartup()) {
       const result = setSystemLaunchAtStartup(false)
       if (!result.success && result.error) {
-        console.error('[WeFlow] 清空配置时关闭开机自启动失败:', result.error)
+        console.error('[OmniMindWeChat] 清空配置时关闭开机自启动失败:', result.error)
       }
     }
     await omniMindService.switchAccount('', () => configService?.clear())
@@ -2890,13 +2891,13 @@ function registerIpcHandlers() {
       }
 
       const configuredCachePath = String(cfg.get('cachePath') || '').trim()
-      const documentsWeFlowDir = join(app.getPath('documents'), 'WeFlow')
+      const documentsOmniMindWeChatDir = join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
       const userDataCacheDir = join(app.getPath('userData'), 'cache')
       const cacheRootCandidates = [
         configuredCachePath,
-        join(documentsWeFlowDir, 'Images'),
-        join(documentsWeFlowDir, 'Voices'),
-        join(documentsWeFlowDir, 'Emojis'),
+        join(documentsOmniMindWeChatDir, 'Images'),
+        join(documentsOmniMindWeChatDir, 'Voices'),
+        join(documentsOmniMindWeChatDir, 'Emojis'),
         userDataCacheDir
       ].filter(Boolean)
 
@@ -2907,9 +2908,9 @@ function registerIpcHandlers() {
           await removePathIfExists(join(configuredCachePath, 'Voices', wxid), removedPaths, warnings)
           await removePathIfExists(join(configuredCachePath, 'Emojis', wxid), removedPaths, warnings)
         }
-        await removePathIfExists(join(documentsWeFlowDir, 'Images', wxid), removedPaths, warnings)
-        await removePathIfExists(join(documentsWeFlowDir, 'Voices', wxid), removedPaths, warnings)
-        await removePathIfExists(join(documentsWeFlowDir, 'Emojis', wxid), removedPaths, warnings)
+        await removePathIfExists(join(documentsOmniMindWeChatDir, 'Images', wxid), removedPaths, warnings)
+        await removePathIfExists(join(documentsOmniMindWeChatDir, 'Voices', wxid), removedPaths, warnings)
+        await removePathIfExists(join(documentsOmniMindWeChatDir, 'Emojis', wxid), removedPaths, warnings)
         await removePathIfExists(join(userDataCacheDir, wxid), removedPaths, warnings)
       }
 
@@ -2920,11 +2921,11 @@ function registerIpcHandlers() {
 
     if (clearExports) {
       const configuredExportPath = String(cfg.get('exportPath') || '').trim()
-      const documentsWeFlowDir = join(app.getPath('documents'), 'WeFlow')
+      const documentsOmniMindWeChatDir = join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
       const exportRootCandidates = [
         configuredExportPath,
-        join(documentsWeFlowDir, 'exports'),
-        join(documentsWeFlowDir, 'Exports')
+        join(documentsOmniMindWeChatDir, 'exports'),
+        join(documentsOmniMindWeChatDir, 'Exports')
       ].filter(Boolean)
 
       for (const exportRoot of exportRootCandidates) {
@@ -3391,7 +3392,7 @@ function registerIpcHandlers() {
         }
       }
 
-      const maxConcurrentRaw = Number(process.env.WEFLOW_IMAGE_RESOLVE_BATCH_CONCURRENCY || 3)
+      const maxConcurrentRaw = Number(process.env.OMNIMIND_WECHAT_IMAGE_RESOLVE_BATCH_CONCURRENCY || 3)
       const maxConcurrent = Number.isFinite(maxConcurrentRaw)
         ? Math.max(1, Math.min(Math.floor(maxConcurrentRaw), 12))
         : 3
@@ -3654,7 +3655,7 @@ function registerIpcHandlers() {
       : join(app.getAppPath(), 'resources')
     const userDataPath = app.getPath('userData')
     const cachePath = String(cfg.get('cachePath') || '').trim()
-    const emojiCacheDir = cachePath ? join(cachePath, 'Emojis') : join(app.getPath('documents'), 'WeFlow', 'Emojis')
+    const emojiCacheDir = cachePath ? join(cachePath, 'Emojis') : join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName, 'Emojis')
     const workerPath = join(__dirname, 'exportWorker.js')
 
     const runWorker = async () => {
@@ -3794,7 +3795,7 @@ function registerIpcHandlers() {
     const singleMyWxid = String(cfg.getMyWxidCleaned() || '').trim()
     const singleAccountDir = cfg.getAccountDir(singleDbPath, String(cfg.get('myWxid') || '').trim()) || undefined
     const singleCachePath = String(cfg.get('cachePath') || '').trim()
-    const singleEmojiCacheDir = singleCachePath ? join(singleCachePath, 'Emojis') : join(app.getPath('documents'), 'WeFlow', 'Emojis')
+    const singleEmojiCacheDir = singleCachePath ? join(singleCachePath, 'Emojis') : join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName, 'Emojis')
     const workerPath = join(__dirname, 'exportWorker.js')
 
     try {
@@ -4077,7 +4078,7 @@ function registerIpcHandlers() {
       const commaIdx = imagePath.indexOf(',')
       const meta = imagePath.slice(5, commaIdx) // e.g. "image/jpeg;base64"
       const ext = meta.split('/')[1]?.split(';')[0] || 'jpg'
-      const tmpPath = join(app.getPath('temp'), `weflow_preview_${Date.now()}.${ext}`)
+      const tmpPath = join(app.getPath('temp'), `omnimind_wechat_preview_${Date.now()}.${ext}`)
       await writeFile(tmpPath, Buffer.from(imagePath.slice(commaIdx + 1), 'base64'))
       createImageViewerWindow(`file://${tmpPath.replace(/\\/g, '/')}`, liveVideoPath)
     } else {
@@ -4686,7 +4687,7 @@ app.whenReady().then(async () => {
 
   try {
     tray = new Tray(resolvedTrayIcon)
-    tray.setToolTip('WeFlow')
+    tray.setToolTip(APP_IDENTITY.productName)
     const contextMenu = Menu.buildFromTemplate([
       {
         label: '显示主窗口',

@@ -160,6 +160,8 @@ export async function runWeliveExport(options: RunWeliveExportOptions): Promise<
   }
 
   return await new Promise<WeliveExportResult>((resolve) => {
+    // `weflow-export` 是 WeLive 原生进程已经发布的子命令 ABI；桌面产品改名不能改变
+    // 该二进制参数，否则现有跨平台运行时会直接拒绝启动导出任务。
     const child = spawn(exe, [...(options.weliveArgsPrefix || []), 'weflow-export'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true

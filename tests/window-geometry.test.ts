@@ -3,11 +3,11 @@ import { calculateInitialWindowBounds, NORMAL_WINDOW_HEIGHT, NORMAL_WINDOW_WIDTH
 
 describe('main window geometry', () => {
   it('centers the normal target in a capable work area', () => {
-    expect(calculateInitialWindowBounds({ x: 0, y: 0, width: 1920, height: 1080 })).toEqual({ x: 320, y: 140, width: NORMAL_WINDOW_WIDTH, height: NORMAL_WINDOW_HEIGHT, minWidth: 1100, minHeight: 700 })
+    expect(calculateInitialWindowBounds({ x: 0, y: 0, width: 1920, height: 1080 })).toEqual({ x: 420, y: 200, width: NORMAL_WINDOW_WIDTH, height: NORMAL_WINDOW_HEIGHT, minWidth: 1080, minHeight: 680 })
   })
 
   it('preserves the target on an exactly capable work area', () => {
-    expect(calculateInitialWindowBounds({ x: 100, y: 40, width: 1280, height: 800 })).toMatchObject({ x: 100, y: 40, width: 1280, height: 800, minWidth: 1100, minHeight: 700 })
+    expect(calculateInitialWindowBounds({ x: 100, y: 40, width: 1080, height: 680 })).toMatchObject({ x: 100, y: 40, width: 1080, height: 680, minWidth: 1080, minHeight: 680 })
   })
 
   it('clamps size and effective minimums to a smaller work area', () => {

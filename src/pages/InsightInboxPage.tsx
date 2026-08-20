@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarDays, Code, Copy, MessageSquare, RefreshCw, Search, Sparkles, X } from 'lucide-react'
 import { Avatar } from '../components/Avatar'
-import { WeFlowCard, WeFlowDialog, WeFlowSearch, WeFlowTabs } from '../components/common'
+import { AppCard, AppDialog, AppSearch, AppTabs } from '../components/common'
 import type {
   InsightRecord,
   InsightRecordContactFacet,
@@ -275,10 +275,6 @@ export default function InsightInboxPage() {
       <section className="insight-inbox-main">
         <header className="insight-inbox-header">
           <div className="insight-inbox-title-block">
-            <div className="insight-inbox-title-line">
-              <img src={INSIGHT_AVATAR_URL} alt="" className="insight-inbox-logo" />
-              <h2>灵感信箱</h2>
-            </div>
             <div className="insight-inbox-stats">
               <span>共 {stats.total} 条</span>
               <span>今天 {stats.todayCount} 条</span>
@@ -325,7 +321,7 @@ export default function InsightInboxPage() {
             <div className="insight-date-group" key={group.label}>
               <div className="insight-date-label">{group.label}</div>
               {group.records.map((record) => (
-                <WeFlowCard
+                <AppCard
                   id={`insight-record-${record.id}`}
                   key={record.id}
                   className={`insight-card ${record.read ? '' : 'unread'} ${focusedRecordId === record.id ? 'focused' : ''}`}
@@ -374,7 +370,7 @@ export default function InsightInboxPage() {
                       </div>
                     )}
                   </div>
-                </WeFlowCard>
+                </AppCard>
               ))}
             </div>
           ))}
@@ -391,7 +387,7 @@ export default function InsightInboxPage() {
             <Search size={14} />
             <span>关键词搜索</span>
           </div>
-          <WeFlowSearch
+          <AppSearch
             value={keyword}
             onChange={setKeyword}
             placeholder="搜索见解或联系人..."
@@ -404,7 +400,7 @@ export default function InsightInboxPage() {
             <Sparkles size={14} />
             <span>来源类型</span>
           </div>
-          <WeFlowTabs
+          <AppTabs
             activeKey={sourceType}
             onChange={(key) => setSourceType(key as SourceFilterMode)}
             size="sm"
@@ -421,7 +417,7 @@ export default function InsightInboxPage() {
             <CalendarDays size={14} />
             <span>日期范围</span>
           </div>
-          <WeFlowTabs
+          <AppTabs
             activeKey={dateMode}
             onChange={(key) => setDateMode(key as DateFilterMode)}
             size="sm"
@@ -446,7 +442,7 @@ export default function InsightInboxPage() {
             <span>聊天对象</span>
             <span className="insight-widget-count">{contacts.length}</span>
           </div>
-          <WeFlowSearch
+          <AppSearch
             value={contactSearch}
             onChange={setContactSearch}
             placeholder="查找联系人..."
@@ -476,7 +472,7 @@ export default function InsightInboxPage() {
       </aside>
 
       {logRecord && (
-        <WeFlowDialog
+        <AppDialog
           open={Boolean(logRecord)}
           onClose={() => setLogRecord(null)}
           title={`请求日志 - ${logRecord.displayName}`}
@@ -552,7 +548,7 @@ export default function InsightInboxPage() {
               <pre>{logRecord.log.finalInsight}</pre>
             </section>
           </div>
-        </WeFlowDialog>
+        </AppDialog>
       )}
 
       {message && <div className="insight-copy-toast">{message}</div>}

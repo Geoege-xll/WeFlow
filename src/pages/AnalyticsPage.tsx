@@ -13,7 +13,7 @@ import {
 import './AnalyticsPage.scss'
 import { Avatar } from '../components/Avatar'
 import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
-import { WeFlowCard, WeFlowDialog, WeFlowSearch } from '../components/common'
+import { AppCard, AppDialog, AppSearch } from '../components/common'
 
 interface ExcludeCandidate {
   username: string
@@ -712,34 +712,34 @@ function AnalyticsPage() {
       <div className="page-scroll">
         <section className="page-section">
           <div className="stats-overview">
-            <WeFlowCard hoverElastic className="stat-card">
+            <AppCard hoverElastic className="stat-card">
               <div className="stat-icon"><MessageSquare size={16} /></div>
               <div className="stat-info">
                 <span className="stat-label">总消息数</span>
                 <span className="stat-value">{formatNumber(statistics?.totalMessages || 0)}</span>
               </div>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="stat-card">
+            </AppCard>
+            <AppCard hoverElastic className="stat-card">
               <div className="stat-icon"><Send size={16} /></div>
               <div className="stat-info">
                 <span className="stat-label">发送消息</span>
                 <span className="stat-value">{formatNumber(statistics?.sentMessages || 0)}</span>
               </div>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="stat-card">
+            </AppCard>
+            <AppCard hoverElastic className="stat-card">
               <div className="stat-icon"><Inbox size={16} /></div>
               <div className="stat-info">
                 <span className="stat-label">接收消息</span>
                 <span className="stat-value">{formatNumber(statistics?.receivedMessages || 0)}</span>
               </div>
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="stat-card">
+            </AppCard>
+            <AppCard hoverElastic className="stat-card">
               <div className="stat-icon"><Calendar size={16} /></div>
               <div className="stat-info">
                 <span className="stat-label">活跃天数</span>
                 <span className="stat-value">{statistics?.activeDays || 0}</span>
               </div>
-            </WeFlowCard>
+            </AppCard>
           </div>
           {statistics && (
             <div className="time-range">
@@ -748,19 +748,19 @@ function AnalyticsPage() {
             </div>
           )}
           <div className="charts-grid">
-            <WeFlowCard hoverElastic className="chart-card">
+            <AppCard hoverElastic className="chart-card">
               <h3>消息类型分布</h3>
               <ReactECharts option={getTypeChartOption()} style={{ height: 230 }} />
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="chart-card">
+            </AppCard>
+            <AppCard hoverElastic className="chart-card">
               <h3>发送/接收比例</h3>
               <ReactECharts option={getSendReceiveOption()} style={{ height: 230 }} />
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="chart-card wide">
+            </AppCard>
+            <AppCard hoverElastic className="chart-card wide">
               <h3>每小时消息分布</h3>
               <ReactECharts option={getHourlyOption()} style={{ height: 210 }} />
-            </WeFlowCard>
-            <WeFlowCard hoverElastic className="chart-card wide self-sent-ratio-card">
+            </AppCard>
+            <AppCard hoverElastic className="chart-card wide self-sent-ratio-card">
               <div className="chart-title-row">
                 <h3>每日自身发送强度比例</h3>
                 <span>范围：全部 · 基线：{selfSentDailyRatioData.baseline.toFixed(1)} 条/天 · 共 {formatNumber(selfSentDailyDistribution?.totalMessages || 0)} 条</span>
@@ -769,7 +769,7 @@ function AnalyticsPage() {
                 比例 = 当日自身发送量 ÷ 全期每日平均自身发送量。超过 100% 表示高于本人基线
               </div>
               <ReactECharts key={chartThemeSignature} option={getSelfSentDailyRatioOption()} style={{ height: 260 }} />
-            </WeFlowCard>
+            </AppCard>
           </div>
         </section>
         <section className="page-section">
@@ -780,7 +780,7 @@ function AnalyticsPage() {
               return rankings.map((contact, index) => {
                 const ratioPercent = Math.min(100, Math.max(4, Math.round((contact.messageCount / maxCount) * 100)))
                 return (
-                  <WeFlowCard key={contact.username} hoverElastic className="ranking-item">
+                  <AppCard key={contact.username} hoverElastic className="ranking-item">
                     <div className="ranking-progress-bar" style={{ width: `${ratioPercent}%` }} />
                     <span className={`rank ${index < 3 ? 'top' : ''}`}>{index + 1}</span>
                     <div className="contact-avatar">
@@ -792,7 +792,7 @@ function AnalyticsPage() {
                       <span className="contact-stats">发送 {formatNumber(contact.sentCount)} / 接收 {formatNumber(contact.receivedCount)}</span>
                     </div>
                     <span className="message-count">{formatNumber(contact.messageCount)} 条</span>
-                  </WeFlowCard>
+                  </AppCard>
                 )
               })
             })()}
@@ -800,13 +800,13 @@ function AnalyticsPage() {
         </section>
       </div>
 
-      <WeFlowDialog
+      <AppDialog
         open={isExcludeDialogOpen}
         onClose={() => setIsExcludeDialogOpen(false)}
         title="选择不统计的好友"
         size="md"
         filters={
-          <WeFlowSearch
+          <AppSearch
             value={excludeQuery}
             onChange={setExcludeQuery}
             placeholder="搜索好友..."
@@ -872,7 +872,7 @@ function AnalyticsPage() {
             </div>
           )}
         </div>
-      </WeFlowDialog>
+      </AppDialog>
     </div>
   )
 }

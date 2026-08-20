@@ -47,7 +47,7 @@ type NoticeState =
 const SIDEBAR_USER_PROFILE_CACHE_KEY = 'sidebar_user_profile_cache_v1'
 const ACCOUNT_PROFILES_CACHE_KEY = 'account_profiles_cache_v1'
 
-const HIDDEN_DELETED_ACCOUNT_NORM_IDS_KEY = 'weflow_account_mgmt_hidden_deleted_norm_v1'
+const HIDDEN_DELETED_ACCOUNT_NORM_IDS_KEY = 'omnimind_wechat_account_mgmt_hidden_deleted_norm_v1'
 
 const readHiddenDeletedAccountNormIds = (): Set<string> => {
   try {
@@ -624,7 +624,7 @@ function AccountManagementPage() {
       )}
 
       <footer className="account-management-footer">
-        删除仅影响 WeFlow 本地配置，不会删除微信原始数据文件。
+        删除仅影响 OmniMindWeChat 本地配置，不会删除微信原始数据文件。
       </footer>
     </div>
   )

@@ -100,7 +100,7 @@ class GroupSummaryRecordService {
   private records: GroupSummaryIndexRecord[] = []
 
   private resolveUserDataPath(): string {
-    const workerUserDataPath = String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+    const workerUserDataPath = String(process.env.OMNIMIND_WECHAT_USER_DATA_PATH || process.env.OMNIMIND_WECHAT_CONFIG_CWD || '').trim()
     const userDataPath = workerUserDataPath || app?.getPath?.('userData') || process.cwd()
     fs.mkdirSync(userDataPath, { recursive: true })
     return userDataPath
@@ -108,13 +108,13 @@ class GroupSummaryRecordService {
 
   private resolveFilePath(): string {
     if (this.filePath) return this.filePath
-    this.filePath = path.join(this.resolveUserDataPath(), 'weflow-group-summary-records.json')
+    this.filePath = path.join(this.resolveUserDataPath(), 'omnimind-wechat-group-summary-records.json')
     return this.filePath
   }
 
   private resolveLogDir(): string {
     if (this.logDir) return this.logDir
-    this.logDir = path.join(this.resolveUserDataPath(), 'weflow-group-summary-logs')
+    this.logDir = path.join(this.resolveUserDataPath(), 'omnimind-wechat-group-summary-logs')
     fs.mkdirSync(this.logDir, { recursive: true })
     return this.logDir
   }

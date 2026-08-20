@@ -1,8 +1,8 @@
 import React, { useRef } from 'react'
 import { Search as SearchIcon, X } from 'lucide-react'
-import './WeFlowSearch.scss'
+import './AppSearch.scss'
 
-export interface WeFlowSearchProps {
+export interface AppSearchProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
@@ -16,7 +16,7 @@ export interface WeFlowSearchProps {
   style?: React.CSSProperties
 }
 
-export const WeFlowSearch: React.FC<WeFlowSearchProps> = ({
+export const AppSearch: React.FC<AppSearchProps> = ({
   value,
   onChange,
   placeholder = '搜索...',
@@ -44,8 +44,8 @@ export const WeFlowSearch: React.FC<WeFlowSearchProps> = ({
   }
 
   return (
-    <div className={`weflow-search weflow-search-${size} ${disabled ? 'disabled' : ''} ${className}`} style={style}>
-      <span className="weflow-search-icon">
+    <div className={`app-search app-search-${size} ${disabled ? 'disabled' : ''} ${className}`} style={style}>
+      <span className="app-search-icon">
         <SearchIcon size={size === 'sm' ? 14 : size === 'lg' ? 18 : 16} />
       </span>
       <input
@@ -57,12 +57,12 @@ export const WeFlowSearch: React.FC<WeFlowSearchProps> = ({
         placeholder={placeholder}
         autoFocus={autoFocus}
         disabled={disabled}
-        className="weflow-search-input"
+        className="app-search-input"
       />
       {allowClear && value && !disabled && (
         <button
           type="button"
-          className="weflow-search-clear"
+          className="app-search-clear"
           onClick={handleClear}
           aria-label="清除"
         >
@@ -73,4 +73,4 @@ export const WeFlowSearch: React.FC<WeFlowSearchProps> = ({
   )
 }
 
-export default WeFlowSearch
+export default AppSearch

@@ -3,7 +3,7 @@ import { CircleDot } from 'lucide-react'
 import type { OmniMindRecoveryAction, OmniMindTaskViewModel } from './OmniMindQueueViewModel'
 import { omniMindZhCN } from './locale'
 
-export function OmniMindQueueTaskItem({ task, onCancel, onRetry, onSend, onAbandon, onInspectConversation = () => undefined, onOpenHostingSettings = () => undefined }: { task: OmniMindTaskViewModel; onCancel: (id: string) => void | Promise<void>; onRetry: (id: string) => void | Promise<void>; onSend: (id: string) => Promise<{ success: boolean; error?: string }>; onAbandon: (id: string) => void | Promise<void>; onInspectConversation?: (sessionId: string) => void; onOpenHostingSettings?: (opener?: HTMLElement, permissionKind?: 'accessibility' | 'automation') => void }) {
+export function OmniMindQueueTaskItem({ task, onCancel, onRetry, onSend, onAbandon, onConfirmDelivery = () => undefined, onInspectConversation = () => undefined, onOpenHostingSettings = () => undefined }: { task: OmniMindTaskViewModel; onCancel: (id: string) => void | Promise<void>; onRetry: (id: string) => void | Promise<void>; onSend: (id: string) => Promise<{ success: boolean; error?: string }>; onAbandon: (id: string) => void | Promise<void>; onConfirmDelivery?: (id: string) => void | Promise<void>; onInspectConversation?: (sessionId: string) => void; onOpenHostingSettings?: (opener?: HTMLElement, permissionKind?: 'accessibility' | 'automation') => void }) {
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState<string>()
@@ -40,6 +40,7 @@ export function OmniMindQueueTaskItem({ task, onCancel, onRetry, onSend, onAband
     <time dateTime={new Date(task.generatedAt ?? task.updatedAt).toISOString()}>{task.hasGeneratedReply ? `${omniMindZhCN.queue.generatedAt} ` : ''}{new Date(task.generatedAt ?? task.updatedAt).toLocaleTimeString(omniMindZhCN.locale, { hour: '2-digit', minute: '2-digit' })}</time>
     {task.canCancel && <button type="button" disabled={busy} aria-busy={busy} onClick={() => void run(onCancel)}>{omniMindZhCN.actions.cancel}</button>}
     {task.canRetry && !task.failure && <button type="button" disabled={busy} aria-busy={busy} onClick={() => void run(onRetry)}>{omniMindZhCN.actions.retry}</button>}
+    {task.canConfirmDelivery && <button type="button" disabled={busy} aria-busy={busy} onClick={() => void run(onConfirmDelivery)}>{omniMindZhCN.actions.confirmDelivery}</button>}
     {task.canReview && <div className="omnimind-review-actions"><button type="button" disabled={busy} onClick={abandon}>{omniMindZhCN.actions.abandon}</button><button type="button" disabled={busy} aria-busy={busy} onClick={() => void send()}>{omniMindZhCN.actions.send}</button></div>}
     {error && <p role="alert">{error}</p>}
   </article>

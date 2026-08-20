@@ -1,5 +1,5 @@
 import React from 'react'
-import './WeFlowTabs.scss'
+import './AppTabs.scss'
 
 export interface TabItem {
   key: string
@@ -9,7 +9,7 @@ export interface TabItem {
   disabled?: boolean
 }
 
-export interface WeFlowTabsProps {
+export interface AppTabsProps {
   items: TabItem[]
   activeKey: string
   onChange: (key: string) => void
@@ -18,7 +18,7 @@ export interface WeFlowTabsProps {
   style?: React.CSSProperties
 }
 
-export const WeFlowTabs: React.FC<WeFlowTabsProps> = ({
+export const AppTabs: React.FC<AppTabsProps> = ({
   items,
   activeKey,
   onChange,
@@ -27,7 +27,7 @@ export const WeFlowTabs: React.FC<WeFlowTabsProps> = ({
   style
 }) => {
   return (
-    <div className={`weflow-tabs weflow-tabs-${size} ${className}`} style={style} role="tablist">
+    <div className={`app-tabs app-tabs-${size} ${className}`} style={style} role="tablist">
       {items.map((item) => {
         const isActive = item.key === activeKey
         return (
@@ -37,13 +37,13 @@ export const WeFlowTabs: React.FC<WeFlowTabsProps> = ({
             role="tab"
             aria-selected={isActive}
             disabled={item.disabled}
-            className={`weflow-tab-item ${isActive ? 'active' : ''}`}
+            className={`app-tab-item ${isActive ? 'active' : ''}`}
             onClick={() => !item.disabled && onChange(item.key)}
           >
-            {item.icon && <span className="weflow-tab-icon">{item.icon}</span>}
-            <span className="weflow-tab-label">{item.label}</span>
+            {item.icon && <span className="app-tab-icon">{item.icon}</span>}
+            <span className="app-tab-label">{item.label}</span>
             {item.badge !== undefined && item.badge !== null && (
-              <span className="weflow-tab-badge">{item.badge}</span>
+              <span className="app-tab-badge">{item.badge}</span>
             )}
           </button>
         )
@@ -52,4 +52,4 @@ export const WeFlowTabs: React.FC<WeFlowTabsProps> = ({
   )
 }
 
-export default WeFlowTabs
+export default AppTabs

@@ -68,7 +68,7 @@
   background: radial-gradient(circle at center, #1c1c1e 0%, #151516 100%); /* 调配深邃且柔和的黑金底色过渡 */
 }
 
-// Pages migrated to WeFlowPageContainer own their detail scrolling and insets.
+// Pages migrated to AppPageContainer own their detail scrolling and insets.
 .content.native-detail-container {
   overflow: hidden;
   padding: 0;

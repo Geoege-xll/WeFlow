@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/weflow-runtime-logging-service' },
+  app: { getPath: () => '/tmp/omnimind-wechat-runtime-logging-service' },
   clipboard: { readText: () => '', writeText: vi.fn() },
   safeStorage: {
     isEncryptionAvailable: () => true,

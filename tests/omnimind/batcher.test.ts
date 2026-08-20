@@ -27,4 +27,26 @@ describe('SessionTextBatcher', () => {
     await vi.advanceTimersByTimeAsync(2000)
     expect(flushed).toEqual([['one'], ['two']])
   })
+
+  it('按时间稳定排序并完整保留每条消息的群聊发送者身份', async () => {
+    vi.useFakeTimers()
+    const flushed: Array<Array<{ key: string; sender?: string; timestamp: number }>> = []
+    const batcher = new SessionTextBatcher(100, async (batch) => {
+      flushed.push(batch.messages.map((message) => ({ key: message.messageKey, sender: message.senderExternalId, timestamp: message.timestamp })))
+    })
+    batcher.accept({
+      accountId: 'a', sessionId: 'room@chatroom', messageKey: 'later', direction: 'inbound', text: 'later', timestamp: 20,
+      sessionType: 'group', messageType: 1, contentType: 'text', senderExternalId: 'wxid-bob', senderDisplayName: 'Bob'
+    })
+    batcher.accept({
+      accountId: 'a', sessionId: 'room@chatroom', messageKey: 'earlier', direction: 'inbound', text: 'earlier', timestamp: 10,
+      sessionType: 'group', messageType: 1, contentType: 'text', senderExternalId: 'wxid-alice', senderDisplayName: 'Alice'
+    })
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(flushed).toEqual([[
+      { key: 'earlier', sender: 'wxid-alice', timestamp: 10 },
+      { key: 'later', sender: 'wxid-bob', timestamp: 20 }
+    ]])
+  })
 })

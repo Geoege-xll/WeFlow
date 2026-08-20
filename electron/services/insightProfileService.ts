@@ -369,7 +369,7 @@ class InsightProfileService {
     if (this.filePath) return this.filePath
     const userDataPath = app?.getPath?.('userData') || process.cwd()
     fs.mkdirSync(userDataPath, { recursive: true })
-    this.filePath = path.join(userDataPath, 'weflow-insight-profiles.json')
+    this.filePath = path.join(userDataPath, 'omnimind-wechat-insight-profiles.json')
     return this.filePath
   }
 

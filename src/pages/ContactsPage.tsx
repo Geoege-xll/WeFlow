@@ -8,7 +8,7 @@ import type { ContactInfo } from '../types/models'
 import { ContactSnsTimelineDialog } from '../components/Sns/ContactSnsTimelineDialog'
 import { type ContactSnsTimelineTarget, isSingleContactSession } from '../components/Sns/contactSnsTimeline'
 import { displayNameOrFallback } from '../utils/displayName'
-import { WeFlowCard, WeFlowSearch } from '../components/common'
+import { AppCard, AppSearch } from '../components/common'
 import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
 import './ContactsPage.scss'
 
@@ -19,7 +19,7 @@ interface ContactEnrichInfo {
 
 const AVATAR_ENRICH_BATCH_SIZE = 80
 const SEARCH_DEBOUNCE_MS = 120
-const VIRTUAL_ROW_HEIGHT = 64
+const VIRTUAL_ROW_HEIGHT = 56
 const VIRTUAL_OVERSCAN = 10
 const DEFAULT_CONTACTS_LOAD_TIMEOUT_MS = 10000
 const AVATAR_RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -935,7 +935,7 @@ function ContactsPage() {
             <div className="contacts-panel">
                 <div className="contacts-filter-card">
                     <div className="search-bar-wrap">
-                        <WeFlowSearch
+                        <AppSearch
                             value={searchKeyword}
                             onChange={setSearchKeyword}
                             placeholder="搜索联系人..."
@@ -1000,7 +1000,7 @@ function ContactsPage() {
 
                     {contacts.length === 0 && loadIssue ? (
                         <div className="load-issue-state">
-                            <WeFlowCard className="issue-card">
+                            <AppCard className="issue-card">
                                 <div className="issue-title">
                                     <AlertTriangle size={18} />
                                     <span>{loadIssue.title}</span>
@@ -1028,7 +1028,7 @@ function ContactsPage() {
                                 {showDiagnostics && (
                                     <pre className="issue-diagnostics">{diagnosticsText}</pre>
                                 )}
-                            </WeFlowCard>
+                            </AppCard>
                         </div>
                     ) : isLoading && contacts.length === 0 ? (
                         <div className="loading-state">

@@ -1,16 +1,39 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { SecureOmniMindSettingsStore } from '../../electron/omnimind/secure-settings-store'
 import { buildOsascriptArguments, MacOsWeChatTextAdapter, WcdbOutboundVerifier } from '../../electron/omnimind/macos-wechat-text-adapter'
 
+const createFileBackedSettingsStore = async (raw: string) => {
+  const directory = await mkdtemp(join(tmpdir(), 'omnimind-wechat-omnimind-settings-store-'))
+  const target = join(directory, 'settings.json')
+  await writeFile(target, raw, { encoding: 'utf8', mode: 0o600 })
+  const writeAtomic = vi.fn(async (key: string, value: string) => {
+    const destination = join(directory, `${key}.json`)
+    const temporary = join(directory, `.${key}.tmp`)
+    await writeFile(temporary, value, { encoding: 'utf8', mode: 0o600 })
+    await rename(temporary, destination)
+  })
+  const store = new SecureOmniMindSettingsStore({
+    safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+    read: async (key) => {
+      try { return await readFile(join(directory, `${key}.json`), 'utf8') } catch { return undefined }
+    },
+    writeAtomic
+  })
+  return { store, target, writeAtomic, dispose: () => rm(directory, { recursive: true, force: true }) }
+}
+
 describe('secure settings and macOS sender', () => {
-  it('migrates nonempty v1 scope to selected v2 and fails closed for empty scope', async () => {
+  it('migrates nonempty v1 scope directly to selected v4 and fails closed for empty scope', async () => {
     const storage = new Map<string, string>([['settings', JSON.stringify({ pythonBaseUrl: 'http://localhost:8000', scope: [' Alice ', 'alice'], officialAccountPolicy: 'ignore' })]])
     const createStore = () => new SecureOmniMindSettingsStore({
       safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
-      read: async (key) => storage.get(key), writeAtomic: async (key, value) => { storage.set(key, value) }
+      read: async (key) => storage.get(key), writeAtomic: async (key, value) => { storage.set(key, value) }, remove: async (key) => { storage.delete(key) }
     })
     await expect(createStore().getRendererSettings()).resolves.toMatchObject({
-      schemaVersion: 2, managedScope: { mode: 'selected', conversations: [{ sessionId: 'Alice', displayName: '' }] }, autoSend: true, ignoreOfficial: true
+      schemaVersion: 4, managedScope: { mode: 'selected', conversations: [{ sessionId: 'Alice', displayName: '' }] }, autoSend: true
     })
     storage.set('settings', JSON.stringify({ pythonBaseUrl: 'http://localhost:8000', scope: [] }))
     await expect(createStore().getRendererSettings()).resolves.toMatchObject({
@@ -18,7 +41,7 @@ describe('secure settings and macOS sender', () => {
     })
   })
 
-  it('does not persist a half-migrated v2 bundle when legacy timing data is invalid', async () => {
+  it('does not persist a half-migrated v1 bundle when legacy timing data is invalid', async () => {
     const legacy = JSON.stringify({
       pythonBaseUrl: 'http://localhost:8000',
       scope: ['alice'],
@@ -39,19 +62,277 @@ describe('secure settings and macOS sender', () => {
     expect(storage.get('settings')).toBe(legacy)
   })
 
-  it('replaces, keeps and explicitly clears the key in the atomic v2 bundle', async () => {
+  it('migrates the exact historical unversioned v1 file to v4 without losing its encrypted key', async () => {
+    const encryptedApiKey = Buffer.from('v1-file-secret').toString('base64')
+    const raw = JSON.stringify({
+      pythonBaseUrl: 'http://localhost:8000',
+      scope: ['gh_service', 'friend'],
+      officialAccountPolicy: 'ignore',
+      batchWindowMs: 2500,
+      requestTimeoutMs: 30000,
+      encryptedApiKey
+    })
+    const fixture = await createFileBackedSettingsStore(raw)
+    try {
+      await expect(fixture.store.getRendererSettings()).resolves.toMatchObject({
+        schemaVersion: 4,
+        pythonBaseUrl: 'http://localhost:8000/api/v1/open',
+        managedScope: { mode: 'selected', conversations: [{ sessionId: 'friend', displayName: '' }] },
+        autoSend: true,
+        hasApiKey: true,
+        batchWindowMs: 2500
+      })
+      await expect(fixture.store.getApiKey()).resolves.toBe('v1-file-secret')
+      expect(fixture.writeAtomic).toHaveBeenCalledTimes(1)
+      const persisted = JSON.parse(await readFile(fixture.target, 'utf8'))
+      expect(persisted).toMatchObject({ schemaVersion: 4, encryptedApiKey })
+      expect(persisted).not.toHaveProperty('requestTimeoutMs')
+      expect(persisted).not.toHaveProperty('officialAccountPolicy')
+      expect(persisted.managedScope.conversations).toEqual([{ sessionId: 'friend', displayName: '' }])
+    } finally {
+      await fixture.dispose()
+    }
+  })
+
+  it('atomically migrates v3 to v4, drops only the old timeout and preserves every supported field', async () => {
+    const encryptedApiKey = Buffer.from('v3-secret').toString('base64')
+    const legacy = JSON.stringify({
+      schemaVersion: 3,
+      pythonBaseUrl: 'https://api.example.com/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [] },
+      autoSend: false,
+      batchWindowMs: 2500,
+      requestTimeoutMs: 60_000,
+      encryptedApiKey,
+      migrationNotice: 'scope_confirmation_required'
+    })
+    const storage = new Map<string, string>([['settings', legacy]])
+    const writeAtomic = vi.fn(async (key: string, value: string) => { storage.set(key, value) })
+    const store = new SecureOmniMindSettingsStore({
+      safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+      read: async (key) => storage.get(key),
+      writeAtomic
+    })
+
+    await expect(store.getRendererSettings()).resolves.toEqual({
+      schemaVersion: 4,
+      pythonBaseUrl: 'https://api.example.com/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [] },
+      autoSend: false,
+      hasApiKey: true,
+      batchWindowMs: 2500,
+      migrationNotice: 'scope_confirmation_required'
+    })
+    expect(writeAtomic).toHaveBeenCalledTimes(1)
+    const persisted = JSON.parse(storage.get('settings') || '{}')
+    expect(persisted).toEqual({
+      schemaVersion: 4,
+      pythonBaseUrl: 'https://api.example.com/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [] },
+      autoSend: false,
+      batchWindowMs: 2500,
+      encryptedApiKey,
+      migrationNotice: 'scope_confirmation_required'
+    })
+  })
+
+  it('keeps the original v3 file untouched when the v3-to-v4 atomic write fails', async () => {
+    const legacy = JSON.stringify({
+      schemaVersion: 3,
+      pythonBaseUrl: 'http://localhost:8000/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [{ sessionId: 'friend', displayName: 'Friend' }] },
+      autoSend: true,
+      batchWindowMs: 2000,
+      requestTimeoutMs: 15_000
+    })
+    const storage = new Map<string, string>([['settings', legacy]])
+    const store = new SecureOmniMindSettingsStore({
+      safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+      read: async (key) => storage.get(key),
+      writeAtomic: vi.fn(async () => { throw new Error('disk_full') })
+    })
+
+    await expect(store.getRendererSettings()).rejects.toThrow('disk_full')
+    expect(storage.get('settings')).toBe(legacy)
+  })
+
+  it.each([
+    ['future schema', { schemaVersion: 999, pythonBaseUrl: 'http://localhost:8000', scope: ['friend'] }],
+    ['unknown field', { pythonBaseUrl: 'http://localhost:8000', scope: ['friend'], futureCredential: 'must-not-drop' }],
+    ['numeric encrypted key', { pythonBaseUrl: 'http://localhost:8000', scope: ['friend'], encryptedApiKey: 42 }],
+    ['object encrypted key', { pythonBaseUrl: 'http://localhost:8000', scope: ['friend'], encryptedApiKey: { ciphertext: 'x' } }],
+    ['invalid official policy', { pythonBaseUrl: 'http://localhost:8000', scope: ['friend'], officialAccountPolicy: 'include' }],
+    ['array root', []],
+    ['null root', null]
+  ])('rejects invalid v1-shaped %s before any atomic write and preserves the source file', async (_case, payload) => {
+    const raw = JSON.stringify(payload)
+    const fixture = await createFileBackedSettingsStore(raw)
+    try {
+      await expect(fixture.store.getRendererSettings()).rejects.toThrow('settings_corrupt')
+      expect(fixture.writeAtomic).not.toHaveBeenCalled()
+      expect(await readFile(fixture.target, 'utf8')).toBe(raw)
+    } finally {
+      await fixture.dispose()
+    }
+  })
+
+  it('replaces, keeps and explicitly clears the key in the atomic v4 bundle', async () => {
     const storage = new Map<string, string>()
     const store = new SecureOmniMindSettingsStore({
       safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(`encrypted:${value}`), decryptString: (value) => value.toString().replace('encrypted:', '') },
-      read: async (key) => storage.get(key), writeAtomic: async (key, value) => { storage.set(key, value) }
+      read: async (key) => storage.get(key), writeAtomic: async (key, value) => { storage.set(key, value) }, remove: async (key) => { storage.delete(key) }
     })
-    const input = { schemaVersion: 2 as const, pythonBaseUrl: 'https://api.example.com/api/v1/open', managedScope: { mode: 'all' as const, confirmedAt: 1 }, autoSend: false, ignoreOfficial: false, batchWindowMs: 2000, requestTimeoutMs: 15000 }
+    const input = { schemaVersion: 4 as const, pythonBaseUrl: 'https://api.example.com/api/v1/open', managedScope: { mode: 'all' as const, confirmedAt: 1 }, autoSend: false, batchWindowMs: 2000 }
     await store.save({ ...input, apiKeyDraft: 'secret' })
     await store.save(input)
     expect(await store.getApiKey()).toBe('secret')
-    await store.save({ ...input, clearApiKey: true })
+    const beforeClear = JSON.parse(storage.get('settings') || '{}')
+    await store.clearApiKey()
     expect(await store.getApiKey()).toBeUndefined()
     expect((await store.getRendererSettings()).hasApiKey).toBe(false)
+    const afterClear = JSON.parse(storage.get('settings') || '{}')
+    const { encryptedApiKey: _encryptedApiKey, ...preservedSettings } = beforeClear
+    expect(afterClear).toEqual(preservedSettings)
+  })
+
+  it('atomically migrates v2 true/false policies to v4 and removes policy, timeout and stable official sessions', async () => {
+    for (const ignoreOfficial of [true, false]) {
+      const legacy = {
+        schemaVersion: 2,
+        pythonBaseUrl: 'https://api.example.com',
+        managedScope: { mode: 'selected', conversations: [
+          { sessionId: 'gh_service', displayName: '服务号' },
+          { sessionId: 'friend', displayName: '客户' },
+          { sessionId: 'legacy-unknown', displayName: '历史未知项' }
+        ] },
+        autoSend: false,
+        ignoreOfficial,
+        batchWindowMs: 2500,
+        requestTimeoutMs: 30000,
+        encryptedApiKey: Buffer.from('secret').toString('base64')
+      }
+      const storage = new Map<string, string>([['settings', JSON.stringify(legacy)]])
+      const writeAtomic = vi.fn(async (key: string, value: string) => { storage.set(key, value) })
+      const store = new SecureOmniMindSettingsStore({
+        safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+        read: async (key) => storage.get(key),
+        writeAtomic
+      })
+
+      await expect(store.getRendererSettings()).resolves.toMatchObject({
+        schemaVersion: 4,
+        pythonBaseUrl: 'https://api.example.com/api/v1/open',
+        managedScope: { mode: 'selected', conversations: [
+          { sessionId: 'friend', displayName: '客户' },
+          { sessionId: 'legacy-unknown', displayName: '历史未知项' }
+        ] },
+        autoSend: false,
+        hasApiKey: true,
+        batchWindowMs: 2500
+      })
+      expect(writeAtomic).toHaveBeenCalledTimes(1)
+      const migrated = JSON.parse(storage.get('settings') || '{}')
+      expect(migrated.schemaVersion).toBe(4)
+      expect(migrated).not.toHaveProperty('ignoreOfficial')
+      expect(migrated).not.toHaveProperty('requestTimeoutMs')
+      expect(migrated.encryptedApiKey).toBe(legacy.encryptedApiKey)
+    }
+  })
+
+  it('does not expose a half-migrated v4 state when the atomic v2 write fails', async () => {
+    const legacy = JSON.stringify({
+      schemaVersion: 2,
+      pythonBaseUrl: 'http://localhost:8000',
+      managedScope: { mode: 'selected', conversations: [{ sessionId: 'friend', displayName: 'Friend' }] },
+      autoSend: true,
+      ignoreOfficial: false,
+      batchWindowMs: 2000,
+      requestTimeoutMs: 15000
+    })
+    const storage = new Map<string, string>([['settings', legacy]])
+    const store = new SecureOmniMindSettingsStore({
+      safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+      read: async (key) => storage.get(key),
+      writeAtomic: vi.fn(async () => { throw new Error('disk_full') })
+    })
+
+    await expect(store.getRendererSettings()).rejects.toThrow('disk_full')
+    expect(storage.get('settings')).toBe(legacy)
+  })
+
+  it('reads a real v2 settings file and atomically replaces it with a complete v4 bundle', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'omnimind-wechat-omnimind-v2-migration-'))
+    const target = join(directory, 'settings.json')
+    const legacy = {
+      schemaVersion: 2,
+      pythonBaseUrl: 'http://localhost:8000',
+      managedScope: { mode: 'selected', conversations: [
+        { sessionId: 'gh_service', displayName: '服务号' },
+        { sessionId: 'friend', displayName: '客户' }
+      ] },
+      autoSend: false,
+      ignoreOfficial: false,
+      batchWindowMs: 2500,
+      requestTimeoutMs: 30000,
+      encryptedApiKey: Buffer.from('real-file-secret').toString('base64'),
+      migrationNotice: 'scope_confirmation_required'
+    }
+    await writeFile(target, JSON.stringify(legacy), { encoding: 'utf8', mode: 0o600 })
+    const store = new SecureOmniMindSettingsStore({
+      safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+      read: async (key) => {
+        try { return await readFile(join(directory, `${key}.json`), 'utf8') } catch { return undefined }
+      },
+      // 与主进程生产适配器保持同一业务边界：完整临时文件落盘后才 rename 替换目标，
+      // 因此断言读取到 v4 也同时证明迁移不是只修改内存中的 mock Map。
+      writeAtomic: async (key, value) => {
+        await mkdir(directory, { recursive: true })
+        const destination = join(directory, `${key}.json`)
+        const temporary = join(directory, `.${key}.tmp`)
+        await writeFile(temporary, value, { encoding: 'utf8', mode: 0o600 })
+        await rename(temporary, destination)
+      }
+    })
+
+    try {
+      await expect(store.getRendererSettings()).resolves.toMatchObject({
+        schemaVersion: 4,
+        managedScope: { mode: 'selected', conversations: [{ sessionId: 'friend', displayName: '客户' }] },
+        autoSend: false,
+        hasApiKey: true,
+        migrationNotice: 'scope_confirmation_required'
+      })
+      await expect(store.getApiKey()).resolves.toBe('real-file-secret')
+      const persisted = JSON.parse(await readFile(target, 'utf8'))
+      expect(persisted).toMatchObject({ schemaVersion: 4, encryptedApiKey: legacy.encryptedApiKey, migrationNotice: 'scope_confirmation_required' })
+      expect(persisted).not.toHaveProperty('ignoreOfficial')
+      expect(persisted).not.toHaveProperty('requestTimeoutMs')
+      expect(persisted.managedScope.conversations).toEqual([{ sessionId: 'friend', displayName: '客户' }])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the dedicated key-clear command available for a migrated empty scope', async () => {
+    const storage = new Map<string, string>([
+      ['settings', JSON.stringify({ pythonBaseUrl: 'http://localhost:8000', scope: [], batchWindowMs: 2000, requestTimeoutMs: 15000 })],
+      ['api-key', Buffer.from('legacy-secret').toString('base64')]
+    ])
+    const store = new SecureOmniMindSettingsStore({
+      safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(value), decryptString: (value) => value.toString() },
+      read: async (key) => storage.get(key), writeAtomic: async (key, value) => { storage.set(key, value) }, remove: async (key) => { storage.delete(key) }
+    })
+    await expect(store.clearApiKey()).resolves.toBeUndefined()
+    expect(await store.getRendererSettings()).toMatchObject({
+      pythonBaseUrl: 'http://localhost:8000/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [] },
+      autoSend: true,
+      batchWindowMs: 2000,
+      migrationNotice: 'scope_confirmation_required',
+      hasApiKey: false
+    })
+    expect(JSON.parse(storage.get('settings') || '{}')).not.toHaveProperty('encryptedApiKey')
+    expect(storage.has('api-key')).toBe(false)
   })
   it('fails closed when safe storage encryption is unavailable', async () => {
     const storage = new Map<string, string>()
@@ -60,7 +341,7 @@ describe('secure settings and macOS sender', () => {
       read: async (key) => storage.get(key),
       writeAtomic: async (key, value) => { storage.set(key, value) }
     })
-    await expect(store.save({ schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, ignoreOfficial: true, apiKeyDraft: 'secret', batchWindowMs: 2000, requestTimeoutMs: 15000 })).rejects.toThrow('secure_storage_unavailable')
+    await expect(store.save({ schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, apiKeyDraft: 'secret', batchWindowMs: 2000 })).rejects.toThrow('secure_storage_unavailable')
     expect([...storage.values()].join('')).not.toContain('secret')
   })
 
@@ -71,8 +352,8 @@ describe('secure settings and macOS sender', () => {
       read: async (key) => storage.get(key),
       writeAtomic: async (key, value) => { storage.set(key, value) }
     })
-    await store.save({ schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, ignoreOfficial: true, apiKeyDraft: 'secret', batchWindowMs: 2000, requestTimeoutMs: 15000 })
-    expect(await store.getRendererSettings()).toEqual({ schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, ignoreOfficial: true, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000 })
+    await store.save({ schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, apiKeyDraft: 'secret', batchWindowMs: 2000 })
+    expect(await store.getRendererSettings()).toEqual({ schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, hasApiKey: true, batchWindowMs: 2000 })
     expect(JSON.stringify(await store.getRendererSettings())).not.toContain('secret')
     expect(await store.getApiKey()).toBe('secret')
   })
@@ -84,10 +365,19 @@ describe('secure settings and macOS sender', () => {
       safeStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(`encrypted:${value}`), decryptString: (value) => value.toString().replace('encrypted:', '') },
       read: async (key) => storage.get(key), writeAtomic
     })
-    await store.save({ schemaVersion: 2, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, ignoreOfficial: true, apiKeyDraft: 'secret', batchWindowMs: 2000, requestTimeoutMs: 15000 })
+    await store.save({ schemaVersion: 4, pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open', managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] }, autoSend: true, apiKeyDraft: 'secret', batchWindowMs: 2000 })
     expect(writeAtomic).toHaveBeenCalledTimes(1)
     expect(storage.get('settings')).not.toContain('secret')
     storage.set('settings', '{broken')
+    await expect(store.getRendererSettings()).rejects.toThrow('settings_corrupt')
+    storage.set('settings', JSON.stringify({
+      schemaVersion: 4,
+      pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      managedScope: { mode: 'selected', conversations: [{ sessionId: 's', displayName: 'S' }] },
+      autoSend: true,
+      batchWindowMs: 2000,
+      uncontractedModel: 'fake-model'
+    }))
     await expect(store.getRendererSettings()).rejects.toThrow('settings_corrupt')
   })
 

@@ -15,10 +15,10 @@ export interface SingleExportDialogStatusPayload {
   message?: string
 }
 
-const OPEN_SINGLE_EXPORT_EVENT = 'weflow:open-single-export'
-const EXPORT_SESSION_STATUS_EVENT = 'weflow:export-session-status'
-const EXPORT_SESSION_STATUS_REQUEST_EVENT = 'weflow:export-session-status-request'
-const SINGLE_EXPORT_DIALOG_STATUS_EVENT = 'weflow:single-export-dialog-status'
+const OPEN_SINGLE_EXPORT_EVENT = appLocalEvent('open-single-export')
+const EXPORT_SESSION_STATUS_EVENT = appLocalEvent('export-session-status')
+const EXPORT_SESSION_STATUS_REQUEST_EVENT = appLocalEvent('export-session-status-request')
+const SINGLE_EXPORT_DIALOG_STATUS_EVENT = appLocalEvent('single-export-dialog-status')
 
 export const emitOpenSingleExport = (payload: OpenSingleExportPayload) => {
   window.dispatchEvent(new CustomEvent<OpenSingleExportPayload>(OPEN_SINGLE_EXPORT_EVENT, {
@@ -83,3 +83,4 @@ export const onSingleExportDialogStatus = (
   window.addEventListener(SINGLE_EXPORT_DIALOG_STATUS_EVENT, handler as EventListener)
   return () => window.removeEventListener(SINGLE_EXPORT_DIALOG_STATUS_EVENT, handler as EventListener)
 }
+import { appLocalEvent } from '../../shared/app-identity'

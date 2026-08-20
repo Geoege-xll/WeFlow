@@ -84,7 +84,7 @@ function TitleBar({
     if (p === '/settings') return '外观'
     if (p === '/account-management') return '账号管理'
     if (p === '/biz') return '公众号'
-    return 'WeFlow'
+    return 'OmniMindWeChat'
   }
 
   const resolvedTitle = getResolvedTitle()
@@ -146,7 +146,7 @@ function TitleBar({
 
       {showLogo && (
         <div className="title-bar-center">
-          <img src="./logo.png" alt="WeFlow" className="title-logo" />
+          <img src="./logo.png" alt="OmniMindWeChat" className="title-logo" />
         </div>
       )}
 

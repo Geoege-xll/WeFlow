@@ -31,7 +31,7 @@ out
 release
 tmp/
 
-# electron-liquid-glass 是嵌套的独立 git 仓库（发布到 npm，WeFlow 走 registry 依赖），
+# electron-liquid-glass 是嵌套的独立 git 仓库（发布到 npm，OmniMindWeChat 走 registry 依赖），
 # 不能被外层仓库跟踪（会变成悬空 gitlink）
 /packages/electron-liquid-glass/
 
@@ -79,6 +79,7 @@ pnpm-lock.yaml
 /pnpm-workspace.yaml
 wechat-research-site
 .codex
+# 原始上游曾使用此目录名存放独立官网仓库；保留忽略项仅防止误纳入历史第三方工作区。
 weflow-web-offical
 /Wedecrypt
 /scripts/syncwcdb.py

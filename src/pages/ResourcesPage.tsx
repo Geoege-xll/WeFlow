@@ -37,7 +37,7 @@ import {
   type ImagePreloadPayload,
   type MediaStreamItem
 } from './ResourcesPage.utils'
-import { WeFlowCard, WeFlowDialog } from '../components/common'
+import { AppCard, AppDialog } from '../components/common'
 import { useDetailChromeRegistration } from '../components/common/DetailChromeContext'
 import './ResourcesPage.scss'
 
@@ -523,7 +523,7 @@ const MediaCard = memo(function MediaCard({
   const timeLabel = useMemo(() => formatTimeLabel(item.createTime), [item.createTime])
 
   return (
-    <WeFlowCard className={`media-card ${selected ? 'selected' : ''} ${isDecryptingVisual ? 'decrypting' : ''}`}>
+    <AppCard className={`media-card ${selected ? 'selected' : ''} ${isDecryptingVisual ? 'decrypting' : ''}`}>
       <button type="button" className="floating-info" onClick={() => onShowInfo(item)} aria-label="查看资源信息">
         <Info size={14} />
       </button>
@@ -597,7 +597,7 @@ const MediaCard = memo(function MediaCard({
           {item.senderUsername && <span>{item.senderUsername}</span>}
         </div>
       </div>
-    </WeFlowCard>
+    </AppCard>
   )
 }, areMediaCardPropsEqual)
 
@@ -2859,7 +2859,7 @@ function ResourcesPage() {
         </div>
       )}
 
-      <WeFlowDialog
+      <AppDialog
         open={Boolean(dialog)}
         onClose={closeDialog}
         title={dialog?.title}
@@ -2900,7 +2900,7 @@ function ResourcesPage() {
             dialog.message
           )
         )}
-      </WeFlowDialog>
+      </AppDialog>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { join } from 'path'
 import * as https from 'https'
 import * as http from 'http'
 import { ConfigService } from './config'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 // Sherpa-onnx 类型定义
 type OfflineRecognizer = any
@@ -92,7 +93,7 @@ export class VoiceTranscribeService {
   private resolveModelDir(): string {
     const configured = this.configService.get('whisperModelDir') as string | undefined
     if (configured) return configured
-    return join(app.getPath('documents'), 'WeFlow', 'models', 'sensevoice')
+    return join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName, 'models', 'sensevoice')
   }
 
   private resolveModelPath(fileName: string): string {

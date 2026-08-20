@@ -2,9 +2,9 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Inbox, Loader2 } from 'lucide-react'
 import { useDetailChromeRegistration } from './DetailChromeContext'
-import './WeFlowPageContainer.scss'
+import './AppPageContainer.scss'
 
-export interface WeFlowPageContainerProps {
+export interface AppPageContainerProps {
   title?: React.ReactNode
   subtitle?: React.ReactNode
   /** @deprecated Use subtitle. */
@@ -45,7 +45,7 @@ export interface WeFlowPageContainerProps {
   style?: React.CSSProperties
 }
 
-export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
+export const AppPageContainer: React.FC<AppPageContainerProps> = ({
   title,
   subtitle,
   description,
@@ -131,7 +131,7 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
     if (effectiveLoading) {
       return (
         <div
-          className="content-unavailable-view weflow-page-empty is-loading"
+          className="content-unavailable-view app-page-empty is-loading"
           role="status"
           aria-live="polite"
         >
@@ -145,7 +145,7 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
 
     if (effectiveEmpty) {
       return (
-        <div className="content-unavailable-view weflow-page-empty" role="status">
+        <div className="content-unavailable-view app-page-empty" role="status">
           <div className="content-unavailable-icon">
             {React.isValidElement(emptyIcon)
               ? emptyIcon
@@ -168,17 +168,17 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
   }
 
   return (
-    <div className={`weflow-page-container mac-detail-view ${className}`} style={style}>
+    <div className={`app-page-container mac-detail-view ${className}`} style={style}>
       {hasHeader && !rendersChromeInShell && (
-        <header className="weflow-page-header mac-detail-header">
-          <div className="weflow-page-header-main">
-            <div className="weflow-page-header-titles">
+        <header className="app-page-header mac-detail-header">
+          <div className="app-page-header-main">
+            <div className="app-page-header-titles">
               {renderNavControls && (
-                <div className="weflow-page-nav-group">
+                <div className="app-page-nav-group">
                   {backVisible && (
                     <button
                       type="button"
-                      className="weflow-page-nav-btn"
+                      className="app-page-nav-btn"
                       onClick={handleBack}
                       disabled={!backAvailable}
                       aria-label="返回"
@@ -190,7 +190,7 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
                   {forwardVisible && (
                     <button
                       type="button"
-                      className="weflow-page-nav-btn"
+                      className="app-page-nav-btn"
                       onClick={handleForward}
                       disabled={!forwardAvailable}
                       aria-label="前进"
@@ -202,40 +202,40 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
                 </div>
               )}
               {icon && (
-                <div className="weflow-page-icon">
+                <div className="app-page-icon">
                   {React.isValidElement(icon)
                     ? icon
                     : React.createElement(icon, { 'aria-hidden': true })}
                 </div>
               )}
-              <div className="weflow-page-header-text">
-                {title && <h1 className="weflow-page-title">{title}</h1>}
+              <div className="app-page-header-text">
+                {title && <h1 className="app-page-title">{title}</h1>}
                 {effectiveSubtitle && (
-                  <p className="weflow-page-subtitle weflow-page-description">
+                  <p className="app-page-subtitle app-page-description">
                     {effectiveSubtitle}
                   </p>
                 )}
               </div>
             </div>
             {effectiveHeaderFilters && (
-              <div className="weflow-page-header-filters">{effectiveHeaderFilters}</div>
+              <div className="app-page-header-filters">{effectiveHeaderFilters}</div>
             )}
             {effectiveHeaderActions && (
-              <div className="weflow-page-header-actions">{effectiveHeaderActions}</div>
+              <div className="app-page-header-actions">{effectiveHeaderActions}</div>
             )}
           </div>
         </header>
       )}
 
       <main
-        className={`weflow-page-body ${scrollable ? 'scrollable' : 'fixed'}`}
+        className={`app-page-body ${scrollable ? 'scrollable' : 'fixed'}`}
         aria-busy={effectiveLoading || undefined}
       >
         {renderContent()}
       </main>
 
       {effectiveFooter && (
-        <footer className="weflow-page-footer safe-area-bottom-inset">
+        <footer className="app-page-footer safe-area-bottom-inset">
           {effectiveFooter}
         </footer>
       )}
@@ -243,4 +243,4 @@ export const WeFlowPageContainer: React.FC<WeFlowPageContainerProps> = ({
   )
 }
 
-export default WeFlowPageContainer
+export default AppPageContainer

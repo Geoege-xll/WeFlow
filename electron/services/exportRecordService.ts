@@ -19,10 +19,10 @@ class ExportRecordService {
 
   private resolveFilePath(): string {
     if (this.filePath) return this.filePath
-    const workerUserDataPath = String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+    const workerUserDataPath = String(process.env.OMNIMIND_WECHAT_USER_DATA_PATH || process.env.OMNIMIND_WECHAT_CONFIG_CWD || '').trim()
     const userDataPath = workerUserDataPath || app?.getPath?.('userData') || process.cwd()
     fs.mkdirSync(userDataPath, { recursive: true })
-    this.filePath = path.join(userDataPath, 'weflow-export-records.json')
+    this.filePath = path.join(userDataPath, 'omnimind-wechat-export-records.json')
     return this.filePath
   }
 

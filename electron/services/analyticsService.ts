@@ -4,6 +4,7 @@ import { join } from 'path'
 import { readFile, writeFile, rm } from 'fs/promises'
 import { app } from 'electron'
 import { createHash } from 'crypto'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 export interface ChatStatistics {
   totalMessages: number
@@ -520,7 +521,7 @@ class AnalyticsService {
   }
 
   private getCacheFilePath(): string {
-    return join(app.getPath('documents'), 'WeFlow', 'analytics_cache.json')
+    return join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName, 'analytics_cache.json')
   }
 
   private async loadCacheFromFile(): Promise<{ key: string; data: any; updatedAt: number } | null> {

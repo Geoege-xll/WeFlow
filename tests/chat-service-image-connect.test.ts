@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/private/tmp/weflow-chat-image-test', isPackaged: false },
+  app: { getPath: () => '/private/tmp/omnimind-wechat-chat-image-test', isPackaged: false },
   BrowserWindow: class {},
   dialog: { showMessageBox: vi.fn() }
 }))
-vi.mock('../electron/services/config', () => ({ ConfigService: class { getCacheBasePath() { return '/private/tmp/weflow-chat-image-test' } } }))
+vi.mock('../electron/services/config', () => ({ ConfigService: class { getCacheBasePath() { return '/private/tmp/omnimind-wechat-chat-image-test' } } }))
 vi.mock('../electron/services/wcdbService', () => ({ wcdbService: { isReady: () => false } }))
 vi.mock('../electron/services/messageCacheService', () => ({ MessageCacheService: class {} }))
 vi.mock('../electron/services/contactCacheService', () => ({ ContactCacheService: class { getAllEntries() { return {} } } }))

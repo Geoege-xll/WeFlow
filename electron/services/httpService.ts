@@ -2219,7 +2219,7 @@ class HttpService {
       chatlab: {
         version: '0.0.2',
         exportedAt: Math.floor(Date.now() / 1000),
-        generator: 'WeFlow'
+        generator: 'OmniMindWeChat'
       },
       meta: {
         name: talkerName,

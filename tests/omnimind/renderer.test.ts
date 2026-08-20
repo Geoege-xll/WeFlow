@@ -1,9 +1,22 @@
 import { readFileSync } from 'fs'
 import { describe, expect, it } from 'vitest'
 import { buildQueueViewModel } from '../../src/features/omnimind/OmniMindQueueViewModel'
-import { omniMindZhCN } from '../../src/features/omnimind/locale'
+import { OMNIMIND_SETTINGS_TABS, omniMindZhCN } from '../../src/features/omnimind/locale'
 
 describe('OmniMind renderer contract', () => {
+  it('keeps one four-section settings navigation contract without legacy strategy or timing identities', () => {
+    expect(OMNIMIND_SETTINGS_TABS).toEqual([
+      { id: 'connection', label: '连接与凭据' },
+      { id: 'scope', label: '托管范围' },
+      { id: 'response', label: '回复与时序' },
+      { id: 'permissions', label: '权限中心' }
+    ])
+    expect(omniMindZhCN.settings.tabs).toEqual(Object.fromEntries(OMNIMIND_SETTINGS_TABS.map(({ id, label }) => [id, label])))
+    expect(omniMindZhCN.hostingCenter.tabs).toEqual({ overview: '概览与队列', ...omniMindZhCN.settings.tabs })
+    expect(omniMindZhCN.settings.tabs).not.toHaveProperty('strategy')
+    expect(omniMindZhCN.settings.tabs).not.toHaveProperty('timing')
+  })
+
   it('maps authoritative task states into current, waiting, and recent groups', () => {
     const base = { accountId: 'a', sessionId: 's', sessionName: 'Alice', messageKeys: ['m'], text: 'x', createdAt: 1, updatedAt: 1 }
     const view = buildQueueViewModel({ runtimeState: 'running', current: { ...base, id: '1', status: 'sending' }, waiting: [{ ...base, id: '2', status: 'queued' }], recent: [{ ...base, id: '3', status: 'send_failed', failureStage: 'verification_baseline', reason: 'verification_baseline_failed', replyText: 'preserved' }] })
@@ -21,14 +34,23 @@ describe('OmniMind renderer contract', () => {
     expect(components).not.toContain('正在发送')
   })
 
-  it('mounts a fixed queue panel and composer only on the ordinary Chat page', () => {
+  it('mounts hosting only on Home and preserves the Chat manual-composer policy', () => {
     const chatPage = readFileSync(new URL('../../src/pages/ChatPage.tsx', import.meta.url), 'utf8')
-    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue && <OmniMindQueuePanel')
-    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).composer && currentSession && myWxid && <OmniMindManualMessageComposer')
+    const home = readFileSync(new URL('../../src/features/home/HomeWorkbench.tsx', import.meta.url), 'utf8')
+    const homeQueue = readFileSync(new URL('../../src/features/home/HomeQueuePanel.tsx', import.meta.url), 'utf8')
+    expect(home).toContain('useOmniMind()')
+    expect(homeQueue).toContain('全局串行队列')
+    expect(home).toContain('OmniMindHostingSettingsModal')
+    expect(chatPage).not.toContain('<OmniMindHostingCenterDialog')
+    expect(chatPage).not.toContain('showQueueDrawer')
+    expect(chatPage).not.toContain('<OmniMindQueuePanel')
+    expect(chatPage).not.toContain('自动托管')
+    expect(chatPage).not.toContain('托管设置')
+    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession), currentSession?.username).composer && currentSession && myWxid && <OmniMindManualMessageComposer')
+    expect(chatPage).toContain('recoveryActionScope="conversation-only"')
     const styles = readFileSync(new URL('../../src/features/omnimind/omnimind.scss', import.meta.url), 'utf8')
-    expect(styles).toContain('width: var(--omnimind-queue-width)')
+    expect(styles).toContain('.omnimind-hosting-center .omnimind-queue-panel.is-embedded')
     expect(styles).toContain('min-width: 0')
-    expect(styles).not.toMatch(/\.omnimind-queue-panel[^}]*display:\s*none/)
     expect(chatPage).not.toContain('omnimind-queue-separator')
   })
 
@@ -36,7 +58,6 @@ describe('OmniMind renderer contract', () => {
     const panel = readFileSync(new URL('../../src/features/omnimind/OmniMindQueuePanel.tsx', import.meta.url), 'utf8')
     const styles = readFileSync(new URL('../../src/features/omnimind/omnimind.scss', import.meta.url), 'utf8')
     expect(panel).not.toContain('omnimind-narrow-hint')
-    expect(panel).not.toMatch(/collapse|drawer|accordion/i)
     expect(styles).not.toContain('overflow-x: auto')
     expect(styles).not.toContain('min-width: 1080px')
   })

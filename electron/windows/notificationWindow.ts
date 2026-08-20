@@ -295,8 +295,8 @@ export async function showNotification(data: any) {
     // 检查会话过滤
     const filterMode = config.get("notificationFilterMode") || "all";
     const filterList = config.get("notificationFilterList") || [];
-    // 系统通知（如 "WeFlow 准备就绪"）不是聊天消息，不应受会话白/黑名单影响
-    const isSystemNotification = sessionId.startsWith("weflow-");
+    // 系统通知（如 "OmniMindWeChat 准备就绪"）不是聊天消息，不应受会话白/黑名单影响
+    const isSystemNotification = sessionId.startsWith("omnimind-wechat-");
 
     if (!isSystemNotification && filterMode !== "all") {
       const isInList = sessionId !== "" && filterList.includes(sessionId);

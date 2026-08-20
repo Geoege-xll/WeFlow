@@ -20,6 +20,7 @@ import { voiceTranscribeService } from './voiceTranscribeService'
 import { ImageDecryptService } from './imageDecryptService'
 import { CONTACT_REGION_LOOKUP_DATA } from './contactRegionLookupData'
 import { LRUCache } from '../utils/LRUCache.js'
+import { APP_IDENTITY } from '../../shared/app-identity'
 
 export interface ChatSession {
   username: string
@@ -551,7 +552,7 @@ class ChatService {
     try {
       await dialog.showMessageBox({
         type: 'error',
-        title: 'WeFlow 启动失败',
+        title: 'OmniMindWeChat 启动失败',
         message: '启动失败，请反馈错误码。',
         detail,
         buttons: ['确定'],
@@ -2349,7 +2350,7 @@ class ChatService {
         }
 
         // 创建新游标
-        // 注意：WeFlow 数据库中的 create_time 是以秒为单位的
+        // 注意：OmniMindWeChat 数据库中的 create_time 是以秒为单位的
         const cursorBatchSize = Math.max(1, Math.floor(state?.batchSize || requestLimit || this.messageBatchDefault))
         const beginTimestamp = startTime > 10000000000 ? Math.floor(startTime / 1000) : startTime
         const endTimestamp = endTime > 10000000000 ? Math.floor(endTime / 1000) : endTime
@@ -2537,7 +2538,7 @@ class ChatService {
   }
 
   /**
-   * 从本地 WeFlow emoji 缓存目录按 md5 查找文件
+   * 从本地 OmniMindWeChat emoji 缓存目录按 md5 查找文件
    */
   private findEmojiInLocalCache(msg: Message): void {
     if (!msg.emojiMd5) return
@@ -8024,7 +8025,7 @@ class ChatService {
     }
     // 回退到默认目录
     const documentsPath = app.getPath('documents')
-    return join(documentsPath, 'WeFlow', 'Voices')
+    return join(documentsPath, APP_IDENTITY.documentsDirectoryName, 'Voices')
   }
 
   private getEmojiCacheDir(): string {
@@ -8034,7 +8035,7 @@ class ChatService {
     }
     // 回退到默认目录
     const documentsPath = app.getPath('documents')
-    return join(documentsPath, 'WeFlow', 'Emojis')
+    return join(documentsPath, APP_IDENTITY.documentsDirectoryName, 'Emojis')
   }
 
   clearCaches(options?: { includeMessages?: boolean; includeContacts?: boolean; includeEmojis?: boolean }): { success: boolean; error?: string } {
@@ -8836,7 +8837,7 @@ class ChatService {
    */
   async getVoiceData(sessionId: string, msgId: string, createTime?: number, serverId?: string | number, senderWxidOpt?: string): Promise<{ success: boolean; data?: string; error?: string }> {
     const startTime = Date.now()
-    const verboseVoiceTrace = process.env.WEFLOW_VOICE_TRACE === '1'
+    const verboseVoiceTrace = process.env.OMNIMIND_WECHAT_VOICE_TRACE === '1'
     const msgCreateTimeLabel = (value?: number): string => {
       return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '无'
     }
@@ -9812,7 +9813,7 @@ class ChatService {
   /** 获取持久化转写缓存文件路径 */
   private getTranscriptCachePath(): string {
     const cachePath = this.configService.get('cachePath')
-    const base = cachePath || join(app.getPath('documents'), 'WeFlow')
+    const base = cachePath || join(app.getPath('documents'), APP_IDENTITY.documentsDirectoryName)
     return join(base, 'Voices', 'transcripts.json')
   }
 
@@ -10322,7 +10323,7 @@ class ChatService {
         if (!Array.isArray(targetGroupSessionIds) || targetGroupSessionIds.length === 0) {
           return { raw: null, chunks: 0 }
         }
-        const singleGroupThresholdRaw = Number(process.env.WEFLOW_MY_FOOTPRINT_SINGLE_GROUP_THRESHOLD || 40)
+        const singleGroupThresholdRaw = Number(process.env.OMNIMIND_WECHAT_MY_FOOTPRINT_SINGLE_GROUP_THRESHOLD || 40)
         const singleGroupThreshold = Number.isFinite(singleGroupThresholdRaw) && singleGroupThresholdRaw >= 1
           ? Math.floor(singleGroupThresholdRaw)
           : 40
@@ -10371,7 +10372,7 @@ class ChatService {
         if (normalized.length === 0) return []
 
         // 规避 native options_json 可能存在的固定缓冲上限：按 payload 字节安全分块。
-        const maxBytesRaw = Number(process.env.WEFLOW_MY_FOOTPRINT_GROUP_OPTIONS_MAX_BYTES || 900)
+        const maxBytesRaw = Number(process.env.OMNIMIND_WECHAT_MY_FOOTPRINT_GROUP_OPTIONS_MAX_BYTES || 900)
         const maxBytes = Number.isFinite(maxBytesRaw) && maxBytesRaw >= 512
           ? Math.floor(maxBytesRaw)
           : 900
@@ -11613,7 +11614,7 @@ class ChatService {
   }
 
   private shouldRunMyFootprintHeavyDebug(): boolean {
-    const flag = String(process.env.WEFLOW_MY_FOOTPRINT_DEBUG || '').trim().toLowerCase()
+    const flag = String(process.env.OMNIMIND_WECHAT_MY_FOOTPRINT_DEBUG || '').trim().toLowerCase()
     return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on'
   }
 

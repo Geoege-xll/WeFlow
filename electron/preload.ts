@@ -15,12 +15,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     testConnection: (payload: unknown) => ipcRenderer.invoke('omnimind:testConnection', payload),
     clearApiKey: () => ipcRenderer.invoke('omnimind:clearApiKey', {}),
     enable: () => ipcRenderer.invoke('omnimind:enable', {}),
+    // 只暴露无参数的窄命令；权威 paused 状态与预检结果全部由主进程快照返回。
+    pause: () => ipcRenderer.invoke('omnimind:pause', {}),
+    resume: () => ipcRenderer.invoke('omnimind:resume', {}),
     disable: () => ipcRenderer.invoke('omnimind:disable', {}),
     sendManual: (payload: unknown) => ipcRenderer.invoke('omnimind:sendManual', payload),
     cancelTask: (taskId: string) => ipcRenderer.invoke('omnimind:cancelTask', { taskId }),
     retryTask: (taskId: string) => ipcRenderer.invoke('omnimind:retryTask', { taskId }),
     sendGeneratedReply: (taskId: string) => ipcRenderer.invoke('omnimind:sendGeneratedReply', { taskId }),
     abandonGeneratedReply: (taskId: string) => ipcRenderer.invoke('omnimind:abandonGeneratedReply', { taskId }),
+    // 暴露最窄的任务确认能力；renderer 只能提交 taskId，权威状态转换完全留在主进程队列。
+    confirmDelivery: (taskId: string) => ipcRenderer.invoke('omnimind:confirmDelivery', { taskId }),
     getPermissions: () => ipcRenderer.invoke('omnimind:getPermissions', {}),
     requestPermission: (permission: 'accessibility' | 'automation') => ipcRenderer.invoke('omnimind:requestPermission', { permission }),
     recheckPermission: (permission: 'accessibility' | 'automation') => ipcRenderer.invoke('omnimind:recheckPermission', { permission }),

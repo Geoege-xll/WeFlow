@@ -8,6 +8,7 @@ import { createHash } from 'crypto'
 import { pathToFileURL } from 'url'
 import { normalizedMessageEventHub } from '../omnimind/normalized-message-event-hub'
 import { bootstrapWatermark, failedFetchResult, nextInspectedWatermark } from '../omnimind/message-ingress-policy'
+import { classifyOmniMindConversation } from '../../shared/omnimind/conversation-domain'
 
 interface SessionBaseline {
   lastTimestamp: number
@@ -74,7 +75,22 @@ export class MessagePushService {
   private rerunRequested = false
   private started = false
   private generation = 0
+  /**
+   * 这里只保存已经完成 bootstrap 的 OmniMind destination。未完成的 true 请求必须留在
+   * transition 事务内部，不能被 hasActiveDestination 或 DB monitor 当成可用 destination。
+   */
   private omniMindSubscriberActive = false
+  private omniMindSubscriberDesired = false
+  private omniMindSubscriberTransitionVersion = 0
+  private omniMindSubscriberTransitionTail: Promise<void> = Promise.resolve()
+  private omniMindSubscriberTransition?: { active: boolean; promise: Promise<boolean> }
+  /**
+   * HTTP 与 OmniMind 共用同一套 connect/baseline。这里记录的只是“正在建立基线”的事务，
+   * 它既不是 HTTP 已配置的标记，也不是 destination 已提交的标记。version 用于让 stop、
+   * 配置关闭或反向 subscriber 命令立即失效旧 Promise，避免旧结果迟到覆盖新意图。
+   */
+  private sharedBootstrapVersion = 0
+  private sharedBootstrap?: { generation: number; version: number; promise: Promise<boolean> }
   private baselineReady = false
   private messageTableScanRequested = false
   private readonly pendingMessageTableNames = new Set<string>()
@@ -88,12 +104,21 @@ export class MessagePushService {
     if (this.started) return
     this.started = true
     const generation = ++this.generation
-    void this.refreshConfiguration('startup', generation, true)
+    // hasActiveDestination 只表示“已提交”，因此 startup 必须根据配置/意图显式发起 bootstrap。
+    if (this.hasDesiredDestination()) {
+      void this.ensureSharedBootstrap('startup', generation, true)
+    } else {
+      this.resetRuntimeState()
+    }
   }
 
   stop(): void {
     this.started = false
     this.generation += 1
+    // stop 既要失效共享基线，也要让尚未进入 transition 临界区的 subscriber 命令返回失败；
+    // 保留 desired/committed 值供未来显式 start 使用，但本代命令不得在 stop 后补交成功。
+    this.omniMindSubscriberTransitionVersion += 1
+    this.invalidateSharedBootstrap()
     this.processing = false
     this.rerunRequested = false
     this.resetRuntimeState()
@@ -134,14 +159,24 @@ export class MessagePushService {
   async handleConfigChanged(key: string): Promise<boolean> {
     if (!PUSH_CONFIG_KEYS.has(String(key || '').trim())) return true
     if (key === 'dbPath' || key === 'decryptKey' || key === 'myWxid') {
+      this.invalidateSharedBootstrap()
       this.resetRuntimeState()
       chatService.close()
     }
-    return this.refreshConfiguration(`config:${key}`, this.generation, false)
+
+    // HTTP 配置关闭且没有 OmniMind destination 时，必须失效仍在等待的旧 bootstrap；
+    // 不能让旧 Promise 在配置关闭之后补交 baseline 并重新开启 DB monitor。
+    if (!this.hasDesiredDestination()) {
+      this.invalidateSharedBootstrap()
+      this.resetRuntimeState()
+      return true
+    }
+    return this.ensureSharedBootstrap(`config:${key}`, this.generation, false)
   }
 
   async rebaselineForAccountChange(): Promise<boolean> {
     const generation = ++this.generation
+    this.invalidateSharedBootstrap()
     this.resetRuntimeState()
     const connectResult = await chatService.connect()
     if (generation !== this.generation) return false
@@ -150,21 +185,31 @@ export class MessagePushService {
     return this.baselineReady
   }
 
-  async handleOmniMindSubscriberChanged(active = normalizedMessageEventHub.hasSubscribers): Promise<boolean> {
-    const hadDestination = this.hasActiveDestination()
-    this.omniMindSubscriberActive = active
-    const hasDestination = this.hasActiveDestination()
-    if (!this.started) return true
-    if (!hadDestination && hasDestination) {
-      this.resetRuntimeState()
-      return this.refreshConfiguration('omnimind-subscriber-bootstrap', this.generation, true)
-    } else if (hadDestination && !hasDestination) {
-      this.resetRuntimeState()
+  handleOmniMindSubscriberChanged(active = normalizedMessageEventHub.hasSubscribers): Promise<boolean> {
+    // 相同目标的在途请求共享同一事务，避免两个 true 同时 connect/baseline。
+    if (this.omniMindSubscriberTransition?.active === active) return this.omniMindSubscriberTransition.promise
+    if (!this.omniMindSubscriberTransition && this.omniMindSubscriberActive === active) {
+      this.omniMindSubscriberDesired = active
+      return Promise.resolve(true)
     }
-    return true
+
+    this.omniMindSubscriberDesired = active
+    // 当 HTTP 也未配置时，false 是共享 bootstrap 的反向命令，必须在排队前立即失效旧事务。
+    // 若 HTTP 仍配置，则 bootstrap 仍属于 HTTP，不能因为 OmniMind 离开而取消。
+    if (!active && !this.isPushEnabled()) this.invalidateSharedBootstrap()
+    const version = ++this.omniMindSubscriberTransitionVersion
+    const operation = this.enqueueOmniMindSubscriberTransition(() => this.transitionOmniMindSubscriber(active, version))
+    const transition = { active, promise: operation }
+    this.omniMindSubscriberTransition = transition
+    const clear = (): void => {
+      if (this.omniMindSubscriberTransition === transition) this.omniMindSubscriberTransition = undefined
+    }
+    operation.then(clear, clear)
+    return operation
   }
 
   handleConfigCleared(): void {
+    this.invalidateSharedBootstrap()
     this.resetRuntimeState()
     chatService.close()
   }
@@ -173,8 +218,23 @@ export class MessagePushService {
     return this.configService.get('messagePushEnabled') === true
   }
 
+  /** 配置/命令层的目标意图，不代表基线已经可供消息监听使用。 */
+  private hasDesiredDestination(): boolean {
+    return this.isPushEnabled() || this.omniMindSubscriberDesired || this.omniMindSubscriberActive
+  }
+
+  /**
+   * DB monitor 与快速加入路径只能读取“已提交 destination”：HTTP 仅配置为 true 不够，
+   * 必须等共享 baseline 完成；OmniMind 也必须完成自己的事务提交。
+   */
   private hasActiveDestination(): boolean {
-    return this.isPushEnabled() || this.omniMindSubscriberActive
+    return this.baselineReady && (this.isPushEnabled() || this.omniMindSubscriberActive)
+  }
+
+  /** 令当前共享 bootstrap 失效；旧异步结果仍可结束，但再也不能提交到当前代。 */
+  private invalidateSharedBootstrap(): void {
+    this.sharedBootstrapVersion += 1
+    this.sharedBootstrap = undefined
   }
 
   private resetRuntimeState(): void {
@@ -197,32 +257,141 @@ export class MessagePushService {
     }
   }
 
-  private async refreshConfiguration(reason: string, generation = this.generation, requireStarted = false): Promise<boolean> {
-    if (!this.hasActiveDestination()) {
+  private async refreshConfiguration(
+    reason: string,
+    generation = this.generation,
+    requireStarted = false,
+    pendingDestination = false,
+    shouldContinue: () => boolean = () => true
+  ): Promise<boolean> {
+    if (!this.hasActiveDestination() && !pendingDestination) {
       this.resetRuntimeState()
       return true
     }
 
     const connectResult = await chatService.connect()
-    if (generation !== this.generation || (requireStarted && !this.started)) return false
+    if (generation !== this.generation || (requireStarted && !this.started) || !shouldContinue()) return false
     if (!connectResult.success) {
-      console.warn(`[MessagePushService] Bootstrap connect failed (${reason}):`, connectResult.error)
+      // 日志只保留稳定阶段，不输出数据库路径、账号或底层连接失败详情。
+      console.warn(`[MessagePushService] Bootstrap connect failed (${reason})`)
       return false
     }
 
-    await this.bootstrapBaseline(generation, requireStarted)
+    await this.bootstrapBaseline(generation, requireStarted, shouldContinue)
     return this.baselineReady
   }
 
-  private async bootstrapBaseline(generation: number, requireStarted: boolean): Promise<void> {
-    if (generation !== this.generation || (requireStarted && !this.started)) return
+  /**
+   * 合并同一 generation 内 HTTP startup 与 OmniMind activation 的 connect/baseline。
+   * Promise 内部吞并底层异常并只返回稳定布尔值；调用方据此提交各自 destination，
+   * 从而不会把“配置存在”或“连接正在进行”误当成可运行状态。
+   */
+  private ensureSharedBootstrap(
+    reason: string,
+    generation = this.generation,
+    requireStarted = true
+  ): Promise<boolean> {
+    if (this.baselineReady && this.hasDesiredDestination()) return Promise.resolve(true)
+
+    const version = this.sharedBootstrapVersion
+    const existing = this.sharedBootstrap
+    if (existing && existing.generation === generation && existing.version === version) {
+      return existing.promise
+    }
+
+    const isCurrent = (): boolean =>
+      generation === this.generation &&
+      version === this.sharedBootstrapVersion &&
+      (!requireStarted || this.started) &&
+      this.hasDesiredDestination()
+
+    // 每个新事务从空基线开始；若旧事务已被失效，它的 finally/失败清理不得碰新事务。
+    this.resetRuntimeState()
+    let record!: { generation: number; version: number; promise: Promise<boolean> }
+    const promise = this.refreshConfiguration(
+      reason,
+      generation,
+      requireStarted,
+      true,
+      isCurrent
+    ).catch(() => false).then((ready) => {
+      if (!isCurrent()) return false
+      if (!ready && !this.hasActiveDestination()) this.resetRuntimeState()
+      return ready
+    }).finally(() => {
+      if (this.sharedBootstrap === record) this.sharedBootstrap = undefined
+    })
+    record = { generation, version, promise }
+    this.sharedBootstrap = record
+    return promise
+  }
+
+  private async bootstrapBaseline(generation: number, requireStarted: boolean, shouldContinue: () => boolean = () => true): Promise<void> {
+    if (generation !== this.generation || (requireStarted && !this.started) || !shouldContinue()) return
     const sessionsResult = await chatService.getSessions()
-    if (generation !== this.generation || (requireStarted && !this.started)) return
+    if (generation !== this.generation || (requireStarted && !this.started) || !shouldContinue()) return
     if (!sessionsResult.success || !sessionsResult.sessions) {
       return
     }
     this.setBaseline(sessionsResult.sessions as ChatSession[])
     this.baselineReady = true
+  }
+
+  /** 将 destination 命令严格串行化；失败不会阻塞后续显式重试。 */
+  private enqueueOmniMindSubscriberTransition(command: () => Promise<boolean>): Promise<boolean> {
+    const operation = this.omniMindSubscriberTransitionTail.then(command, command)
+    this.omniMindSubscriberTransitionTail = operation.then(() => undefined, () => undefined)
+    return operation
+  }
+
+  /**
+   * OmniMind destination 的事务提交边界。true 在 connect/baseline 成功前始终不可见；
+   * false 会在调用时先通过 version 失效 pending true，再按队列顺序完成最终停用。
+   */
+  private async transitionOmniMindSubscriber(active: boolean, version: number): Promise<boolean> {
+    if (version !== this.omniMindSubscriberTransitionVersion || this.omniMindSubscriberDesired !== active) {
+      return this.omniMindSubscriberActive === active
+    }
+
+    const previousActive = this.omniMindSubscriberActive
+    const hadDestination = this.hasActiveDestination()
+    if (!active) {
+      this.omniMindSubscriberActive = false
+      if (hadDestination && !this.hasActiveDestination()) this.resetRuntimeState()
+      return true
+    }
+
+    if (previousActive) return true
+    // 未启动时只记录已提交意图；后续 start() 会沿既有 startup 路径建立 baseline。
+    if (!this.started) {
+      this.omniMindSubscriberActive = true
+      return true
+    }
+    // HTTP destination 已经承担连接与基线生命周期时，增加 OmniMind destination 无需重复 bootstrap。
+    if (hadDestination) {
+      this.omniMindSubscriberActive = true
+      return true
+    }
+
+    const isCurrent = (): boolean =>
+      version === this.omniMindSubscriberTransitionVersion && this.omniMindSubscriberDesired
+    const ready = await this.ensureSharedBootstrap(
+      'omnimind-subscriber-bootstrap',
+      this.generation,
+      true
+    )
+
+    if (!ready || !isCurrent()) {
+      this.omniMindSubscriberActive = previousActive
+      // 本次是从“无 destination”开始的事务；清掉可能产生的未完成 baseline/timer，
+      // 但不额外发送 false 通知，也不关闭共享 chatService 连接。
+      if (!hadDestination && !this.isPushEnabled()) this.resetRuntimeState()
+      if (isCurrent()) this.omniMindSubscriberDesired = previousActive
+      return false
+    }
+
+    this.omniMindSubscriberActive = true
+    return true
   }
 
   private scheduleSync(options: { scanMessageBackedSessions?: boolean; messageTableNames?: string[] } = {}): void {
@@ -1219,16 +1388,9 @@ export class MessagePushService {
   }
 
   private getSessionType(sessionId: string, session: ChatSession): MessagePushPayload['sessionType'] {
-    if (sessionId.endsWith('@chatroom')) {
-      return 'group'
-    }
-    if (sessionId.startsWith('gh_') || session.type === 'official') {
-      return 'official'
-    }
-    if (session.type === 'friend') {
-      return 'private'
-    }
-    return 'other'
+    // 消息接入与 Renderer 候选目录共享同一 sessionId 分类。ChatSession.type 在本服务中
+    // 是 WCDB 数值而非联系人枚举，不能再用字符串比较制造一套永远命不中的官方账号规则。
+    return classifyOmniMindConversation(sessionId, session.type)
   }
 
   private shouldPushPayload(payload: MessagePushPayload): boolean {
@@ -1482,6 +1644,25 @@ export class MessagePushService {
       const accountId = String(this.configService.get('myWxid') || '').trim()
       const messageKey = String(message.messageKey || '').trim()
       if (accountId && messageKey) {
+        const rowSenderExternalId = String(message.senderUsername || '').trim()
+        const normalizedRowSender = rowSenderExternalId.toLocaleLowerCase()
+        const normalizedSessionId = payload.sessionId.trim().toLocaleLowerCase()
+        // WCDB 异常行或上游解析回退可能把 chatroom 房间 ID 填入 senderUsername。
+        // 群聊 sender 必须同时满足“不是当前 room”且“本身不是任意 @chatroom 标识”，
+        // 才能成为客户身份；这里只做身份拒绝，不丢弃原消息。
+        const provenGroupSender = rowSenderExternalId
+          && normalizedRowSender !== normalizedSessionId
+          && !normalizedRowSender.endsWith('@chatroom')
+          ? rowSenderExternalId
+          : undefined
+        // 私聊会话 ID 就是对端联系人身份；群聊的 sessionId 则只是 chatroom 房间，绝不能
+        // 回退成客户。群聊只有消息行携带 senderUsername 时才形成可证明 actor，缺失就保持空值，
+        // 让 Open Chat 服务端安全失败或转人工，而不是把整个群错误合并成一个客户。
+        const senderExternalId = payload.sessionType === 'private'
+          ? (message.isSend === 1 ? accountId : payload.sessionId)
+          : payload.sessionType === 'group'
+            ? provenGroupSender
+            : rowSenderExternalId || undefined
         delivered = normalizedMessageEventHub.publish({
           accountId,
           sessionId: payload.sessionId,
@@ -1492,7 +1673,10 @@ export class MessagePushService {
           sessionType: payload.sessionType,
           messageType: Number(message.localType || 0),
           contentType: Number(message.localType || 0) === 1 ? 'text' : 'other',
-          sessionName: payload.groupName || payload.sourceName
+          sessionName: payload.groupName || payload.sourceName,
+          senderExternalId,
+          // 展示名不能作为身份兜底；只有 senderExternalId 可证明时才随事件传播。
+          senderDisplayName: senderExternalId ? payload.sourceName : undefined
         })
       }
     }

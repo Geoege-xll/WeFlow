@@ -2,6 +2,7 @@ import { isManagedSession, type ManagedScope, type NormalizedMessageEvent, type 
 import { GlobalAiQueue, type GenerationResult, type QueueSendResult } from './global-ai-queue'
 import { type NormalizedMessageEventHub } from './normalized-message-event-hub'
 import { SessionTextBatcher } from './session-text-batcher'
+import { UNIFIED_AUTOMATIC_HOSTING_POLICY } from '../../shared/omnimind/automatic-hosting-policy.generated'
 
 interface ControllerDependencies {
   hub: NormalizedMessageEventHub
@@ -12,7 +13,6 @@ interface ControllerDependencies {
   managedScope?: () => ManagedScope
   scope?: () => string[]
   autoSend?: () => boolean
-  ignoreOfficial?: () => boolean
   authorizeIngress?: () => boolean
   onSnapshotChanged?: (snapshot: OmniMindSnapshot) => void
 }
@@ -25,16 +25,28 @@ export class OmniMindController {
 
   constructor(private readonly dependencies: ControllerDependencies) {
     this.queue = new GlobalAiQueue({ generate: dependencies.generate, send: dependencies.send, autoSend: dependencies.autoSend, onChanged: () => dependencies.onSnapshotChanged?.(this.getSnapshot()) })
-    this.batcher = new SessionTextBatcher(dependencies.batchDelayMs ?? 2000, async (batch) => {
-      this.queue.enqueue({
-        accountId: batch.accountId,
-        sessionId: batch.sessionId,
-        sessionName: batch.sessionName,
-        sessionType: batch.messages[0]?.sessionType,
-        messageKeys: batch.messages.map((message) => message.messageKey),
-        text: batch.messages.map((message) => message.text).join('\n')
-      })
-    })
+    this.batcher = new SessionTextBatcher(
+      dependencies.batchDelayMs ?? UNIFIED_AUTOMATIC_HOSTING_POLICY.batchWindowMs.default,
+      async (batch) => {
+      // Open Chat 当前声明 max_messages=50。高频会话在一个聚合窗口内超过该限制时，
+      // 按已经稳定排序的消息序列切成多个队列任务；每个任务仍保留独立消息身份，不能截断或合并丢失。
+      const maxMessages = UNIFIED_AUTOMATIC_HOSTING_POLICY.openChat.maxMessagesPerBatch
+      for (let offset = 0; offset < batch.messages.length; offset += maxMessages) {
+        const messages = batch.messages.slice(offset, offset + maxMessages)
+        this.queue.enqueue({
+          accountId: batch.accountId,
+          sessionId: batch.sessionId,
+          sessionName: batch.sessionName,
+          sessionType: messages[0]?.sessionType,
+          // messageKey 仍是本地私有值，后续只允许 Python client 摘要后出网；
+          // Controller 不在此提前拼成不可追踪的单条协议消息。
+          inboundMessages: messages,
+          messageKeys: messages.map((message) => message.messageKey),
+          text: messages.map((message) => message.text).join('\n')
+        })
+      }
+      },
+    )
   }
 
   start(): void {
@@ -51,6 +63,7 @@ export class OmniMindController {
   findTask(taskId: string): OmniMindTask | undefined { return this.queue.findTask(taskId) }
   sendGeneratedReply(taskId: string): ReturnType<GlobalAiQueue['sendGeneratedReply']> { return this.queue.sendGeneratedReply(taskId) }
   abandonGeneratedReply(taskId: string): boolean { return this.queue.abandonGeneratedReply(taskId) }
+  confirmDelivery(taskId: string): boolean { return this.queue.confirmDelivery(taskId) }
   getSnapshot(): OmniMindSnapshot {
     const snapshot = this.queue.getSnapshot()
     const project = ({ id, sessionId, sessionName, status, createdAt, updatedAt, failureStage, reason, retryOf, replyText, generatedAt, newMessagesSinceGenerated }: OmniMindTask) => ({
@@ -70,8 +83,10 @@ export class OmniMindController {
     if (!this.running || event.direction !== 'inbound' || event.messageType !== 1 || event.contentType !== 'text' || !event.text.trim()) return
     if (this.dependencies.authorizeIngress?.() === false) return
     if (event.accountId !== this.dependencies.accountId()) return
+    // 官方账号固定不回复，必须在 queue.noteIncomingMessage 之前退出；否则即使不生成新任务，
+    // 也可能错误修改升级前遗留的待确认任务状态。发送授权层仍会再次独立 fail closed。
+    if (event.sessionType === 'official') return
     this.queue.noteIncomingMessage(event.accountId, event.sessionId)
-    if (event.sessionType === 'official' && (this.dependencies.ignoreOfficial?.() ?? true)) return
     const managedScope = this.dependencies.managedScope?.() ?? { mode: 'selected' as const, conversations: (this.dependencies.scope?.() ?? []).map((sessionId) => ({ sessionId, displayName: '' })) }
     if (!isManagedSession(managedScope, event.sessionId)) return
     this.batcher.accept(event)

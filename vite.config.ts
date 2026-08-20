@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron, { startup as electronStartup } from 'vite-plugin-electron'
+import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { createElectronRestartCoordinator, type ElectronStartOptions } from './electron/dev-lifecycle'
+import { APP_IDENTITY } from './shared/app-identity'
 
 const electronRestartCoordinator = createElectronRestartCoordinator({
   stopOwnedChild: () => electronStartup.exit()
@@ -12,16 +14,24 @@ const handleElectronMainOnStart = (options: ElectronStartOptions): void => {
   void electronRestartCoordinator.restart(options)
 }
 
+const handleElectronRuntimeOnStart = (options: ElectronStartOptions): void => {
+  // 首次开发构建必须等 bootstrap 入口就绪后再启动；后续 main-runtime 热更新则复用
+  // 同一重启协调器。这样独立入口既保证生产求值顺序，也不牺牲开发期自动重启。
+  if (existsSync(resolve(process.cwd(), 'dist-electron/main.js'))) {
+    handleElectronMainOnStart(options)
+  }
+}
+
 const closeElectronDevLifecycle = (): void => {
   void electronRestartCoordinator.close()
 }
 
 const exportWorkerElectronShimPlugin = () => {
-  const virtualId = 'virtual:weflow-export-worker-electron'
+  const virtualId = 'virtual:omnimind-wechat-export-worker-electron'
   const resolvedVirtualId = `\0${virtualId}`
 
   return {
-    name: 'weflow-export-worker-electron-shim',
+    name: 'omnimind-wechat-export-worker-electron-shim',
     enforce: 'pre' as const,
     resolveId(id: string) {
       if (id === virtualId) return resolvedVirtualId
@@ -33,14 +43,14 @@ const exportWorkerElectronShimPlugin = () => {
         import { homedir, tmpdir } from 'os'
         import { join } from 'path'
 
-        const workerUserDataPath = () => String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+        const workerUserDataPath = () => String(process.env.OMNIMIND_WECHAT_USER_DATA_PATH || process.env.OMNIMIND_WECHAT_CONFIG_CWD || '').trim()
         const appDataPath = () => {
           if (process.platform === 'win32' && process.env.APPDATA) return process.env.APPDATA
           if (process.platform === 'darwin') return join(homedir(), 'Library', 'Application Support')
           return process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
         }
         const getPath = (name) => {
-          if (name === 'userData') return workerUserDataPath() || join(appDataPath(), 'WeFlow')
+          if (name === 'userData') return workerUserDataPath() || join(appDataPath(), '${APP_IDENTITY.userDataDirectoryName}')
           if (name === 'documents') return join(homedir(), 'Documents')
           if (name === 'desktop') return join(homedir(), 'Desktop')
           if (name === 'downloads') return join(homedir(), 'Downloads')
@@ -53,7 +63,7 @@ const exportWorkerElectronShimPlugin = () => {
           isPackaged: Boolean(process.resourcesPath && process.env.NODE_ENV !== 'development'),
           getPath,
           getAppPath: () => process.cwd(),
-          getName: () => 'WeFlow',
+          getName: () => '${APP_IDENTITY.productName}',
           getVersion: () => process.env.npm_package_version || '0.0.0',
           // Worker 中不存在 app 生命周期事件（如 will-quit），no-op 兼容注册退出钩子的服务
           on: () => app,
@@ -111,7 +121,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: 'weflow-electron-dev-lifecycle',
+      name: 'omnimind-wechat-electron-dev-lifecycle',
       configureServer(server) {
         server.httpServer?.once('close', () => {
           closeElectronDevLifecycle()
@@ -120,8 +130,10 @@ export default defineConfig({
     },
     electron([
       {
+        // 业务主进程独立产出，不能与 bootstrap 共用模块图；否则 bundler 可能把
+        // ConfigService 等传递依赖提升到 app.setPath(userData) 之前。
         entry: 'electron/main.ts',
-        onstart: handleElectronMainOnStart,
+        onstart: handleElectronRuntimeOnStart,
         vite: {
           build: {
             outDir: 'dist-electron',
@@ -138,7 +150,27 @@ export default defineConfig({
                 'silk-wasm',
                 // 原生 .node 二进制不可打包，运行时从 asarUnpack 目录解析
                 '@hicccc77/electron-liquid-glass'
-              ]
+              ],
+              output: {
+                entryFileNames: 'main-runtime.js'
+              }
+            }
+          }
+        }
+      },
+      {
+        entry: 'electron/bootstrap.ts',
+        onstart: handleElectronMainOnStart,
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron', './main-runtime.js'],
+              // package.json 始终只进入窄 bootstrap；它以运行时 require 加载已经完成
+              // 单独构建的 main-runtime.js，打包产物层面也不存在业务依赖前置求值。
+              output: {
+                entryFileNames: 'main.js'
+              }
             }
           }
         }

@@ -39,7 +39,7 @@ afterEach(async () => {
 
 describe('macOS image-key recent template selection', () => {
   it('retains the newest V2 candidates even when traversal encounters the old directory first', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-'))
     roots.push(root)
     const oldDir = join(root, 'a-old')
     const newDir = join(root, 'z-new')
@@ -61,7 +61,7 @@ describe('macOS image-key recent template selection', () => {
   })
 
   it('keeps a hard candidate cap and ignores unreadable shapes and symlinks', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-cap-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-cap-'))
     roots.push(root)
     for (let index = 0; index < 20; index += 1) {
       await writeFile(join(root, `${index}_t.dat`), templateDat('0123456789abcdef', 0x55))
@@ -83,7 +83,7 @@ describe('macOS image-key recent template selection', () => {
   })
 
   it('returns the XOR key from the exact newest template whose AES key verified', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-pair-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-pair-'))
     roots.push(root)
     const newestKey = 'newnewnewnewnew1'
     for (let index = 0; index < 3; index += 1) {
@@ -118,7 +118,7 @@ describe('macOS image-key recent template selection', () => {
   it('starts the authorization scan at most once for one request even when candidates and time remain', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-single-auth-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-single-auth-'))
     roots.push(root)
     for (let index = 0; index < 6; index += 1) {
       await writeFile(join(root, `${index}_t.dat`), templateDat('0123456789abcdef', 0x55))
@@ -135,7 +135,7 @@ describe('macOS image-key recent template selection', () => {
   })
 
   it('stops safely after the administrator prompt is cancelled', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-cancel-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-cancel-'))
     roots.push(root)
     await writeFile(join(root, 'current_t.dat'), templateDat('0123456789abcdef', 0x55))
     const service = new KeyServiceMac()
@@ -166,7 +166,7 @@ describe('macOS image-key recent template selection', () => {
   })
 
   it('scans the fixed main and renderer candidates in one helper authorization and accepts a renderer match', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-renderer-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-renderer-'))
     roots.push(root)
     const key = '0123456789abcdef'
     await writeFile(join(root, 'current_t.dat'), templateDat(key, 0x55))
@@ -185,7 +185,7 @@ describe('macOS image-key recent template selection', () => {
   })
 
   it('finishes progress on miss without writing a key or starting another authorization', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'weflow-key-template-final-status-'))
+    const root = await mkdtemp(join(tmpdir(), 'omnimind-wechat-key-template-final-status-'))
     roots.push(root)
     await writeFile(join(root, 'current_t.dat'), templateDat('0123456789abcdef', 0x55))
     const service = new KeyServiceMac()

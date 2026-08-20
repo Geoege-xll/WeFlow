@@ -6,22 +6,22 @@ import { computeChatResponsiveLayout } from '../src/pages/Chat/chatResponsiveLay
 describe('R6 Chat responsive layout policy', () => {
   it('matches the approved minimum, regular, and wide detail geometries', () => {
     expect(computeChatResponsiveLayout(859, 260)).toEqual({
-      sessionWidth: 280,
-      messageWidth: 567,
+      sessionWidth: 260,
+      messageWidth: 587,
       queueWidth: 0,
       compactHeader: false
     })
 
     expect(computeChatResponsiveLayout(1039, 260)).toEqual({
-      sessionWidth: 280,
-      messageWidth: 747,
+      sessionWidth: 260,
+      messageWidth: 767,
       queueWidth: 0,
       compactHeader: false
     })
 
     expect(computeChatResponsiveLayout(1199, 260)).toEqual({
-      sessionWidth: 280,
-      messageWidth: 907,
+      sessionWidth: 260,
+      messageWidth: 927,
       queueWidth: 0,
       compactHeader: false
     })
@@ -47,8 +47,8 @@ describe('R6 Chat responsive layout policy', () => {
     const narrowPreference = computeChatResponsiveLayout(1199, 120)
     const widePreference = computeChatResponsiveLayout(1199, 520)
 
-    expect(narrowPreference.sessionWidth).toBe(280)
-    expect(widePreference.sessionWidth).toBe(300)
+    expect(narrowPreference.sessionWidth).toBe(250)
+    expect(widePreference.sessionWidth).toBe(260)
     for (const layout of [narrowPreference, widePreference]) {
       expect(layout.sessionWidth + layout.messageWidth + layout.queueWidth + 12).toBe(1199)
     }
@@ -77,12 +77,16 @@ describe('R6 Chat page responsive DOM contract', () => {
     expect(chatPage).toContain('computeChatResponsiveLayout(chatContainerWidth, undefined, desktopHeaderActionCount)')
     expect(chatPage).toContain("'--chat-session-width': `${responsiveLayout.sessionWidth}px`")
     expect(chatPage).toContain('const compactHeader = !standaloneSessionWindow && responsiveLayout.compactHeader')
-    expect(chatPage).toContain('compactHeader={compactHeader}')
+    expect(chatPage).not.toContain('compactHeader={compactHeader}')
   })
 
-  it('preserves the normal and standalone OmniMind mount policy', () => {
-    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue')
-    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).composer')
+  it('keeps normal Chat as a pure split view and preserves the standalone composer policy', () => {
+    expect(chatPage).not.toContain('<OmniMindHostingCenterDialog')
+    expect(chatPage).not.toContain('open-hosting-settings')
+    expect(chatPage).not.toContain('hosting-status-capsule')
+    expect(chatPage).not.toContain('托管设置')
+    expect(chatPage).not.toContain('showQueueDrawer')
+    expect(chatPage).toContain('getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession), currentSession?.username).composer')
     expect(chatStyles).toMatch(/\.chat-page\.standalone\s*\{[^}]*display:\s*flex/s)
   })
 
@@ -94,7 +98,7 @@ describe('R6 Chat page responsive DOM contract', () => {
     expect(combinedStyles).not.toMatch(/\.chat-page:not\(\.standalone\)[^{]*\{[^}]*overflow-x:\s*auto/s)
     expect(combinedStyles).not.toMatch(/\.chat-page:not\(\.standalone\)[^{]*\.session-sidebar\s*\{[^}]*min-width:\s*240px/s)
     expect(combinedStyles).not.toMatch(/\.chat-page:not\(\.standalone\)[^{]*\.message-area\s*\{[^}]*min-width:\s*520px/s)
-    expect(chatStyles).toContain('var(--chat-session-width, 300px) minmax(0, 1fr)')
+    expect(chatStyles).toContain('var(--chat-session-width, 260px) minmax(0, 1fr)')
     expect(chatStyles).toMatch(/\.chat-page:not\(\.standalone\)\s*\{[^}]*display:\s*grid[^}]*gap:\s*12px/s)
     expect(chatPage).not.toContain('className="omnimind-queue-separator"')
     expect(chatPage).not.toContain('className="resize-handle"')

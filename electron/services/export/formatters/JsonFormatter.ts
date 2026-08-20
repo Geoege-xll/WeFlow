@@ -467,7 +467,7 @@ export class JsonFormatter {
         options.displayNamePreference || 'remark'
       )
 
-      const weflow = this.exportService.getWeflowHeader()
+      const omniMindWeChat = this.exportService.getOmniMindWeChatHeader()
       if (options.format === 'arkme-json' && isGroup) {
         this.exportService.throwIfStopRequested(control)
         await this.exportService.mergeGroupMembers(sessionId, collected.memberSet, options.exportAvatars === true)
@@ -684,8 +684,8 @@ export class JsonFormatter {
         }
 
         const arkmeExport: any = {
-          weflow: {
-            ...weflow,
+          omnimindWechat: {
+            ...omniMindWeChat,
             format: 'arkme-json'
           },
           session: arkmeSession,
@@ -701,7 +701,7 @@ export class JsonFormatter {
         await fs.promises.writeFile(outputPath, JSON.stringify(arkmeExport, null, 2), 'utf-8')
       } else {
         const detailedExport: any = {
-          weflow,
+          omnimindWechat: omniMindWeChat,
           session: sessionPayload,
           messages: allMessages
         }

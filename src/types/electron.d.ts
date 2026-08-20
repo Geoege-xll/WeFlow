@@ -255,7 +255,7 @@ export interface BackupImageDatMeta {
 
 export interface BackupManifest {
   version: 1
-  type: 'weflow-db-snapshots'
+  type: 'omnimind-wechat-db-snapshots'
   createdAt: string
   appVersion: string
   source: {
@@ -327,12 +327,15 @@ export interface ElectronAPI {
     testConnection: (payload: { pythonBaseUrl: string; apiKeyDraft?: string }) => Promise<{ success: boolean; kind?: string; latencyMs?: number }>
     clearApiKey: () => Promise<void>
     enable: () => Promise<OmniMindSnapshot>
+    pause: () => Promise<OmniMindSnapshot>
+    resume: () => Promise<OmniMindSnapshot>
     disable: () => Promise<OmniMindSnapshot>
     sendManual: (payload: { sessionId: string; text: string }) => Promise<OmniMindSendResult>
     cancelTask: (taskId: string) => Promise<boolean>
     retryTask: (taskId: string) => Promise<unknown>
     sendGeneratedReply: (taskId: string) => Promise<OmniMindSendResult>
     abandonGeneratedReply: (taskId: string) => Promise<boolean>
+    confirmDelivery: (taskId: string) => Promise<OmniMindSnapshot>
     getPermissions: () => Promise<OmniMindPermissionSnapshot>
     requestPermission: (permission: OmniMindPermissionKind) => Promise<OmniMindPermissionSnapshot>
     recheckPermission: (permission: OmniMindPermissionKind) => Promise<OmniMindPermissionSnapshot>

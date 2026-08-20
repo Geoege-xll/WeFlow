@@ -28,7 +28,7 @@ const buildAesDat = (version: 1 | 2, key: string | Buffer): Buffer => {
 const buildXorDat = (xorKey: number): Buffer => Buffer.from(PNG_PAYLOAD.map((byte) => byte ^ xorKey))
 
 const decryptFixture = async (fixture: Buffer, xorKey: number, configuredAesKey?: string) => {
-  const directory = await mkdtemp(join(tmpdir(), 'weflow-image-dat-version-'))
+  const directory = await mkdtemp(join(tmpdir(), 'omnimind-wechat-image-dat-version-'))
   directories.push(directory)
   const datPath = join(directory, 'fixture.dat')
   await writeFile(datPath, fixture)

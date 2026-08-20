@@ -35,5 +35,5 @@ function enforceLocalDllPriority() {
 try {
     enforceLocalDllPriority()
 } catch (e) {
-    console.error('[WeFlow] Failed to enforce local service priority:', e)
+    console.error('[OmniMindWeChat] Failed to enforce local service priority:', e)
 }

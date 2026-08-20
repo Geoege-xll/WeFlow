@@ -26,13 +26,13 @@ export const computeChatResponsiveLayout = (
     Number.isFinite(measuredAvailableWidth) ? measuredAvailableWidth! : 0
   ))
   const preferredSessionWidth = Math.round(
-    Number.isFinite(measuredPreferredSessionWidth) ? measuredPreferredSessionWidth! : 300
+    Number.isFinite(measuredPreferredSessionWidth) ? measuredPreferredSessionWidth! : 260
   )
   const narrow = availableWidth < 800
   const queueWidth = 0
   const sessionWidth = narrow
-    ? clamp(preferredSessionWidth, 240, 280)
-    : clamp(preferredSessionWidth, 280, 300)
+    ? clamp(preferredSessionWidth, 240, 260)
+    : clamp(preferredSessionWidth, 250, 260)
   const messageWidth = Math.max(0, availableWidth - sessionWidth - queueWidth - (GRID_GAP * GRID_GAP_COUNT))
   const normalizedActionCount = Number.isFinite(desktopActionCount)
     ? Math.max(BASE_DESKTOP_ACTION_COUNT, Math.round(desktopActionCount))

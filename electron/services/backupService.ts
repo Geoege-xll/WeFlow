@@ -11,7 +11,7 @@ import { expandHomePath } from '../utils/pathUtils'
 type BackupDbKind = 'session' | 'contact' | 'emoticon' | 'message' | 'media' | 'sns' | 'hardlink'
 type BackupPhase = 'preparing' | 'scanning' | 'exporting' | 'packing' | 'inspecting' | 'restoring' | 'done' | 'failed'
 type BackupResourceKind = 'image' | 'video' | 'file'
-const TEMP_MARKER = '.weflow-backup-temp'
+const TEMP_MARKER = '.omnimind-wechat-backup-temp'
 const TEMP_TTL_MS = 24 * 60 * 60 * 1000
 
 export interface BackupOptions {
@@ -51,7 +51,7 @@ interface BackupResourceEntry {
 
 interface BackupManifest {
   version: 1
-  type: 'weflow-db-snapshots'
+  type: 'omnimind-wechat-db-snapshots'
   createdAt: string
   appVersion: string
   source: {
@@ -156,7 +156,7 @@ export class BackupService {
     const now = Date.now()
     try {
       for (const entry of readdirSync(root)) {
-        if (!entry.startsWith('weflow-backup-')) continue
+        if (!entry.startsWith('omnimind-wechat-backup-')) continue
         const dir = join(root, entry)
         const marker = join(dir, TEMP_MARKER)
         try {
@@ -710,14 +710,14 @@ export class BackupService {
         return { success: false, error: connected.error || '数据库未连接' }
       }
 
-      stagingDir = await this.createTempDir('weflow-backup-')
+      stagingDir = await this.createTempDir('omnimind-wechat-backup-')
       const snapshotsDir = join(stagingDir, 'snapshots')
       mkdirSync(snapshotsDir, { recursive: true })
 
       const dbs = await this.collectDatabases(connected.dbStorage)
       const manifest: BackupManifest = {
         version: 1,
-        type: 'weflow-db-snapshots',
+        type: 'omnimind-wechat-db-snapshots',
         createdAt: new Date().toISOString(),
         appVersion: app.getVersion(),
         source: {
@@ -848,7 +848,7 @@ export class BackupService {
     let extractDir = ''
     try {
       emitBackupProgress({ phase: 'inspecting', message: '正在读取备份包' })
-      extractDir = await this.createTempDir('weflow-backup-inspect-')
+      extractDir = await this.createTempDir('omnimind-wechat-backup-inspect-')
       await tar.x({
         file: archivePath,
         cwd: extractDir,
@@ -857,7 +857,7 @@ export class BackupService {
       const manifestPath = join(extractDir, 'manifest.json')
       if (!existsSync(manifestPath)) return { success: false, error: '备份包缺少 manifest.json' }
       const manifest = JSON.parse(await readFileAsync(manifestPath, 'utf8')) as BackupManifest
-      if (manifest?.type !== 'weflow-db-snapshots' || manifest.version !== 1) {
+      if (manifest?.type !== 'omnimind-wechat-db-snapshots' || manifest.version !== 1) {
         emitBackupProgress({ phase: 'failed', message: '不支持的备份包格式' })
         return { success: false, error: '不支持的备份包格式' }
       }
@@ -980,7 +980,7 @@ export class BackupService {
     let extractDir = ''
     try {
       emitBackupProgress({ phase: 'inspecting', message: '正在读取备份信息' })
-      extractDir = await this.createTempDir('weflow-backup-restore-')
+      extractDir = await this.createTempDir('omnimind-wechat-backup-restore-')
       await tar.x({
         file: archivePath,
         cwd: extractDir,
@@ -989,7 +989,7 @@ export class BackupService {
       const manifestPath = join(extractDir, 'manifest.json')
       if (!existsSync(manifestPath)) return { success: false, error: '备份包缺少 manifest.json' }
       const manifest = JSON.parse(await readFileAsync(manifestPath, 'utf8')) as BackupManifest
-      if (manifest?.type !== 'weflow-db-snapshots' || manifest.version !== 1) {
+      if (manifest?.type !== 'omnimind-wechat-db-snapshots' || manifest.version !== 1) {
         return { success: false, error: '不支持的备份包格式' }
       }
       const targetWxid = String(manifest.source?.wxid || '').trim()

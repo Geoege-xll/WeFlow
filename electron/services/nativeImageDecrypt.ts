@@ -36,7 +36,7 @@ type NativeAddon = {
 let cachedAddon: NativeAddon | null | undefined
 
 function shouldEnableNative(): boolean {
-  return process.env.WEFLOW_IMAGE_NATIVE !== '0'
+  return process.env.OMNIMIND_WECHAT_IMAGE_NATIVE !== '0'
 }
 
 function expandAsarCandidates(filePath: string): string[] {
@@ -64,6 +64,7 @@ function getAddonCandidates(): string[] {
   const archDir = getArchDir()
   const cwd = process.cwd()
   const fileNames = [
+    // 原生解密模块的磁盘文件名由已编译资源固定，属于资源 ABI，而不是应用品牌。
     `weflow-image-native-${platformDir}-${archDir}.node`
   ]
   const roots = [

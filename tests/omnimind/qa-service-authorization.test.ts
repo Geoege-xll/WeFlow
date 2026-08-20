@@ -7,7 +7,7 @@ const config = new Map<string, unknown>([
 ])
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/weflow-qa-omnimind' },
+  app: { getPath: () => '/tmp/omnimind-wechat-qa-omnimind' },
   clipboard: { readText: () => '', writeText: vi.fn() },
   safeStorage: {
     isEncryptionAvailable: () => true,
@@ -63,10 +63,296 @@ describe('OmniMind generated-reply authorization seam', () => {
     return new OmniMindService(permissions)
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { chatService } = await import('../../electron/services/chatService')
+    vi.mocked(chatService.getSessions).mockResolvedValue({ success: true, sessions: [
+      { username: 'alice', displayName: 'Alice' },
+      { username: 'official', displayName: 'Official' },
+      { username: 'other', displayName: 'Other' }
+    ] } as never)
     config.set('myWxid', 'account-a')
     config.set('dbPath', '/db')
     config.set('decryptKey', 'db-key')
+  })
+
+  it('启动 preflight 在窗口未就绪时 fail closed，不启动 controller 或 subscriber', async () => {
+    const service = await createAuthorizedService()
+    const { messagePushService } = await import('../../electron/services/messagePushService')
+    const order: string[] = []
+    const settings = {
+      schemaVersion: 4 as const,
+      pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      managedScope: { mode: 'all' as const, confirmedAt: 1 },
+      autoSend: true,
+      hasApiKey: true,
+      batchWindowMs: 2000
+    }
+    const internals = service as unknown as {
+      store: { getRendererSettings: () => Promise<typeof settings> }
+      permissions: { authorizeAction: ReturnType<typeof vi.fn> }
+      wechatReadiness: { checkReadiness: ReturnType<typeof vi.fn> }
+      testConnection: ReturnType<typeof vi.fn>
+      controller: { start: ReturnType<typeof vi.fn> }
+    }
+    internals.permissions.authorizeAction = vi.fn(async () => { order.push('permission'); return undefined })
+    internals.store.getRendererSettings = async () => { order.push('settings'); return settings }
+    internals.wechatReadiness.checkReadiness = vi.fn(async () => {
+      order.push('wechat-readiness')
+      return { success: false, stage: 'automation', error: 'wechat_window_recovery_timeout' }
+    })
+    internals.testConnection = vi.fn(async () => { order.push('connection'); return { success: true } })
+    internals.controller.start = vi.fn()
+
+    await expect(service.enable()).resolves.toMatchObject({
+      runtimeState: 'failed',
+      error: 'wechat_window_recovery_timeout'
+    })
+    expect(order).toEqual(['permission', 'settings', 'wechat-readiness'])
+    expect(internals.wechatReadiness.checkReadiness).toHaveBeenCalledWith({ restoreFocus: true })
+    expect(internals.testConnection).not.toHaveBeenCalled()
+    expect(internals.controller.start).not.toHaveBeenCalled()
+    expect(messagePushService.handleOmniMindSubscriberChanged).not.toHaveBeenCalled()
+  })
+
+  it('启动就绪后才连接 Python 并进入 running，发送时仍使用同一 readiness 二次复核', async () => {
+    const service = await createAuthorizedService()
+    const { messagePushService } = await import('../../electron/services/messagePushService')
+    const order: string[] = []
+    const settings = {
+      schemaVersion: 4 as const,
+      pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      managedScope: { mode: 'all' as const, confirmedAt: 1 },
+      autoSend: true,
+      hasApiKey: true,
+      batchWindowMs: 2000
+    }
+    const checkReadiness = vi.fn()
+      .mockImplementationOnce(async () => { order.push('wechat-readiness'); return { success: true } })
+      .mockResolvedValueOnce({ success: false, stage: 'automation', error: 'wechat_process_unavailable' })
+    const runAppleScript = vi.fn(async (_script: string, args: string[]) => args.length === 0 ? 'Finder' : '')
+    const internals = service as unknown as {
+      store: { getRendererSettings: () => Promise<typeof settings> }
+      permissions: { authorizeAction: ReturnType<typeof vi.fn> }
+      wechatReadiness: { checkReadiness: typeof checkReadiness }
+      testConnection: ReturnType<typeof vi.fn>
+      controller: { start: ReturnType<typeof vi.fn> }
+      sender: { dependencies: { adapter: {
+        dependencies: { runAppleScript: typeof runAppleScript }
+        sendText: (input: { accountId: string; sessionId: string; conversationTitle: string; text: string }) => Promise<unknown>
+      } } }
+    }
+    internals.permissions.authorizeAction = vi.fn(async () => { order.push('permission'); return undefined })
+    internals.store.getRendererSettings = async () => { order.push('settings'); return settings }
+    internals.wechatReadiness.checkReadiness = checkReadiness
+    internals.testConnection = vi.fn(async () => { order.push('connection'); return { success: true } })
+    internals.controller.start = vi.fn()
+    internals.sender.dependencies.adapter.dependencies.runAppleScript = runAppleScript
+
+    await expect(service.enable()).resolves.toMatchObject({ runtimeState: 'running' })
+    expect(order).toEqual(['permission', 'settings', 'wechat-readiness', 'connection'])
+    expect(internals.controller.start).toHaveBeenCalledOnce()
+    expect(messagePushService.handleOmniMindSubscriberChanged).toHaveBeenCalledWith(true)
+
+    await expect(internals.sender.dependencies.adapter.sendText({
+      accountId: 'account-a', sessionId: 'alice', conversationTitle: 'Alice', text: 'reply'
+    })).resolves.toMatchObject({ success: false, stage: 'automation', error: 'wechat_process_unavailable' })
+    expect(checkReadiness).toHaveBeenCalledTimes(2)
+    expect(checkReadiness).toHaveBeenNthCalledWith(1, { restoreFocus: true })
+    expect(checkReadiness).toHaveBeenNthCalledWith(2)
+    // 第二次复核失败后只恢复原前台应用，不会进入 SEND_SCRIPT。
+    expect(runAppleScript.mock.calls).toHaveLength(2)
+  })
+
+  it('手动发送在 mutex authorize 内发现重名时，不进入 baseline 或 adapter', async () => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    const getSessions = vi.mocked(chatService.getSessions)
+    getSessions
+      .mockResolvedValueOnce({ success: true, sessions: [{ username: 'target', displayName: 'Alice' }] } as never)
+      .mockResolvedValueOnce({ success: true, sessions: [
+        { username: 'target', displayName: ' Alice ' },
+        { username: 'same-name-group', displayName: 'alice' }
+      ] } as never)
+    const captureBaseline = vi.fn(async () => undefined)
+    const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))
+    const internals = service as unknown as {
+      sender: { dependencies: {
+        adapter: { sendText: typeof sendText }
+        verifier: { captureBaseline: typeof captureBaseline; verify: () => Promise<{ success: true }> }
+      } }
+    }
+    internals.sender.dependencies.adapter = { sendText }
+    internals.sender.dependencies.verifier = { captureBaseline, verify: async () => ({ success: true }) }
+
+    await expect(service.sendManual({ sessionId: 'target', text: 'reply' })).resolves.toEqual({
+      success: false,
+      stage: 'authorization',
+      error: 'target_ambiguous'
+    })
+    expect(getSessions).toHaveBeenCalledTimes(2)
+    expect(captureBaseline).not.toHaveBeenCalled()
+    expect(sendText).not.toHaveBeenCalled()
+  })
+
+  it('手动发送的空显示名也必须进入 mutex authorize 后 fail closed', async () => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    vi.mocked(chatService.getSessions).mockResolvedValue({
+      success: true,
+      sessions: [{ username: 'target', displayName: '   ' }]
+    } as never)
+    const captureBaseline = vi.fn(async () => undefined)
+    const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))
+    const internals = service as unknown as {
+      sender: { dependencies: {
+        adapter: { sendText: typeof sendText }
+        verifier: { captureBaseline: typeof captureBaseline; verify: () => Promise<{ success: true }> }
+      } }
+    }
+    internals.sender.dependencies.adapter = { sendText }
+    internals.sender.dependencies.verifier = { captureBaseline, verify: async () => ({ success: true }) }
+
+    await expect(service.sendManual({ sessionId: 'target', text: 'reply' })).resolves.toEqual({
+      success: false,
+      stage: 'authorization',
+      error: 'conversation_title_unavailable'
+    })
+    expect(captureBaseline).not.toHaveBeenCalled()
+    expect(sendText).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['throws', () => Promise.reject(new Error('private DB failure'))],
+    ['returns success false', () => Promise.resolve({ success: false })],
+    ['omits sessions', () => Promise.resolve({ success: true })]
+  ])('手动发送首次刷新会话 %s 时返回稳定失败且不进入 sender', async (_case, getSessionsResult) => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    vi.mocked(chatService.getSessions).mockImplementation(getSessionsResult as never)
+    const sendManual = vi.fn()
+    const internals = service as unknown as { sender: { sendManual: typeof sendManual } }
+    internals.sender.sendManual = sendManual
+
+    await expect(service.sendManual({ sessionId: 'target', text: 'reply' })).resolves.toEqual({
+      success: false,
+      error: 'conversation_title_unavailable'
+    })
+    expect(sendManual).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['empty title', [{ username: 'target', displayName: '  ' }], 'conversation_title_unavailable'],
+    ['missing target', [{ username: 'other', displayName: 'Alice' }], 'conversation_title_unavailable'],
+    ['title changed', [{ username: 'target', displayName: 'Bob' }], 'target_ambiguous']
+  ])('目标复核对 %s fail closed', async (_case, sessions, expectedError) => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    vi.mocked(chatService.getSessions).mockResolvedValue({ success: true, sessions } as never)
+    const internals = service as unknown as {
+      authorizeUniqueConversationTarget: (sessionId: string, expectedTitle: string) => Promise<unknown>
+    }
+
+    await expect(internals.authorizeUniqueConversationTarget('target', 'Alice')).resolves.toEqual({ success: false, error: expectedError })
+  })
+
+  it('自动发送与 send_failed retry 都在 mutex 内重新校验显示名唯一性', async () => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    const getSessions = vi.mocked(chatService.getSessions)
+    const settings = {
+      schemaVersion: 4 as const,
+      pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      managedScope: { mode: 'all' as const, confirmedAt: 1 },
+      autoSend: true, hasApiKey: true, batchWindowMs: 2000
+    }
+    let sessions = [
+      { username: 'target', displayName: 'Alice' },
+      { username: 'duplicate', displayName: ' alice ' }
+    ]
+    getSessions.mockImplementation(async () => ({ success: true, sessions } as never))
+    const captureBaseline = vi.fn(async () => undefined)
+    const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))
+    const chat = vi.fn(async () => ({ kind: 'reply' as const, text: 'reply' }))
+    const internals = service as unknown as {
+      autoSend: boolean
+      store: { getRendererSettings: () => Promise<typeof settings>; getApiKey: () => Promise<string> }
+      python: { chat: typeof chat }
+      sender: { dependencies: {
+        adapter: { sendText: typeof sendText }
+        verifier: { captureBaseline: typeof captureBaseline; verify: () => Promise<{ success: true; verifiedMessageKey: string }> }
+      } }
+      controller: { queue: {
+        enqueue: (input: { accountId: string; sessionId: string; sessionName: string; messageKeys: string[]; text: string }) => { id: string }
+        whenIdle: () => Promise<void>
+        findTask: (taskId: string) => { status: string; reason?: string } | undefined
+      } }
+    }
+    internals.autoSend = true
+    internals.store.getRendererSettings = async () => settings
+    internals.store.getApiKey = async () => 'api-key'
+    internals.python.chat = chat
+    internals.sender.dependencies.adapter = { sendText }
+    internals.sender.dependencies.verifier = { captureBaseline, verify: async () => ({ success: true, verifiedMessageKey: 'verified' }) }
+
+    const task = internals.controller.queue.enqueue({ accountId: 'account-a', sessionId: 'target', sessionName: 'Alice', messageKeys: ['m'], text: 'input' })
+    await internals.controller.queue.whenIdle()
+    expect(internals.controller.queue.findTask(task.id)).toMatchObject({ status: 'send_failed', reason: 'target_ambiguous' })
+    expect(chat).toHaveBeenCalledWith(expect.not.objectContaining({ timeoutMs: expect.anything() }))
+    expect(captureBaseline).not.toHaveBeenCalled()
+    expect(sendText).not.toHaveBeenCalled()
+
+    sessions = [{ username: 'target', displayName: ' alice ' }]
+    expect(service.retryTask(task.id)).toBe(true)
+    await internals.controller.queue.whenIdle()
+    expect(internals.controller.queue.findTask(task.id)).toMatchObject({ status: 'sent' })
+    expect(captureBaseline).toHaveBeenCalledOnce()
+    expect(sendText).toHaveBeenCalledOnce()
+  })
+
+  it('awaiting generated send 在 mutex 前检查通过但 mutex 内变为重名时仍停止', async () => {
+    const service = await createAuthorizedService()
+    const { chatService } = await import('../../electron/services/chatService')
+    const getSessions = vi.mocked(chatService.getSessions)
+    const settings = {
+      schemaVersion: 4 as const,
+      pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
+      managedScope: { mode: 'all' as const, confirmedAt: 1 },
+      autoSend: false, hasApiKey: true, batchWindowMs: 2000
+    }
+    const captureBaseline = vi.fn(async () => undefined)
+    const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))
+    const internals = service as unknown as {
+      autoSend: boolean
+      store: { getRendererSettings: () => Promise<typeof settings>; getApiKey: () => Promise<string> }
+      python: { chat: () => Promise<{ kind: 'reply'; text: string }> }
+      sender: { dependencies: {
+        adapter: { sendText: typeof sendText }
+        verifier: { captureBaseline: typeof captureBaseline; verify: () => Promise<{ success: true }> }
+      } }
+      controller: { queue: {
+        enqueue: (input: { accountId: string; sessionId: string; sessionName: string; messageKeys: string[]; text: string }) => { id: string }
+        whenIdle: () => Promise<void>
+      } }
+    }
+    internals.autoSend = false
+    internals.store.getRendererSettings = async () => settings
+    internals.store.getApiKey = async () => 'api-key'
+    internals.python.chat = async () => ({ kind: 'reply', text: 'reply' })
+    internals.sender.dependencies.adapter = { sendText }
+    internals.sender.dependencies.verifier = { captureBaseline, verify: async () => ({ success: true }) }
+    const task = internals.controller.queue.enqueue({ accountId: 'account-a', sessionId: 'target', sessionName: 'Alice', messageKeys: ['m'], text: 'input' })
+    await internals.controller.queue.whenIdle()
+    getSessions.mockResolvedValueOnce({ success: true, sessions: [
+      { username: 'target', displayName: 'Alice' },
+      { username: 'group', displayName: 'Alice' }
+    ] } as never)
+
+    await expect(service.sendGeneratedReply(task.id)).resolves.toEqual({
+      success: false, stage: 'authorization', error: 'target_ambiguous'
+    })
+    expect(captureBaseline).not.toHaveBeenCalled()
+    expect(sendText).not.toHaveBeenCalled()
   })
 
   it('fails closed when an awaiting reply belongs to a previous account', async () => {
@@ -87,14 +373,12 @@ describe('OmniMind generated-reply authorization seam', () => {
     }
     internals.autoSend = false
     internals.store.getRendererSettings = async () => ({
-      schemaVersion: 2,
+      schemaVersion: 4,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected', conversations: [{ sessionId: 'alice', displayName: 'Alice' }] },
       autoSend: false,
-      ignoreOfficial: true,
       hasApiKey: true,
-      batchWindowMs: 2000,
-      requestTimeoutMs: 15000
+      batchWindowMs: 2000
     })
     internals.store.getApiKey = async () => 'api-key'
     internals.python.chat = async () => ({ kind: 'reply', text: 'reply for account A' })
@@ -118,13 +402,13 @@ describe('OmniMind generated-reply authorization seam', () => {
     expect(internals.sender.sendAutomatic).not.toHaveBeenCalled()
   })
 
-  it('revalidates scope, official policy, and decryptable credentials with typed failures', async () => {
+  it('revalidates scope, permanent official exclusion, and decryptable credentials with typed failures', async () => {
     const service = await createAuthorizedService()
     let settings = {
-      schemaVersion: 2 as const,
+      schemaVersion: 4 as const,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected' as const, conversations: [] as Array<{ sessionId: string; displayName: string }> },
-      autoSend: false, ignoreOfficial: true, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000
+      autoSend: false, hasApiKey: true, batchWindowMs: 2000
     }
     const internals = service as unknown as {
       store: { getRendererSettings: () => Promise<typeof settings>; getApiKey: () => Promise<string | undefined> }
@@ -135,11 +419,13 @@ describe('OmniMind generated-reply authorization seam', () => {
     const task = { accountId: 'account-a', sessionId: 'official', sessionName: 'Official', sessionType: 'official' as const, messageKeys: ['m'], text: 'private', id: 'task', status: 'awaiting_manual_send' as const, createdAt: 1, updatedAt: 1, replyText: 'reply' }
 
     await expect(internals.authorizeGeneratedReply(task)).resolves.toEqual({ success: false, error: 'managed_scope_changed' })
-    settings = { ...settings, managedScope: { mode: 'selected', conversations: [{ sessionId: ' Official ', displayName: 'Official' }] } }
+    // 即使模拟升级前已进入范围的历史 official 任务，发送授权仍必须独立 fail closed。
+    settings = { ...settings, managedScope: { mode: 'selected', conversations: [{ sessionId: 'official', displayName: 'Official' }] } }
     await expect(internals.authorizeGeneratedReply(task)).resolves.toEqual({ success: false, error: 'official_account_filtered' })
-    settings = { ...settings, ignoreOfficial: false }
+    const friendTask = { ...task, sessionId: 'friend', sessionName: 'Friend', sessionType: 'friend' as const }
+    settings = { ...settings, managedScope: { mode: 'selected', conversations: [{ sessionId: 'friend', displayName: 'Friend' }] } }
     internals.store.getApiKey = async () => { throw new Error('decrypt failed') }
-    await expect(internals.authorizeGeneratedReply(task)).resolves.toEqual({ success: false, error: 'api_key_unavailable' })
+    await expect(internals.authorizeGeneratedReply(friendTask)).resolves.toEqual({ success: false, error: 'api_key_unavailable' })
   })
 
   it('rechecks the current account after the generated reply acquires the shared sender mutex', async () => {
@@ -148,14 +434,12 @@ describe('OmniMind generated-reply authorization seam', () => {
     const blocker = new Promise<void>((resolve) => { releaseBlocker = resolve })
     const sentTexts: string[] = []
     const settings = {
-      schemaVersion: 2 as const,
+      schemaVersion: 4 as const,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'alice', displayName: 'Alice' }] },
       autoSend: false,
-      ignoreOfficial: true,
       hasApiKey: true,
-      batchWindowMs: 2000,
-      requestTimeoutMs: 15000
+      batchWindowMs: 2000
     }
     const internals = service as unknown as {
       autoSend: boolean
@@ -206,14 +490,12 @@ describe('OmniMind generated-reply authorization seam', () => {
   it('preserves an unconfirmed delivery and prohibits blind retry', async () => {
     const service = await createAuthorizedService()
     const settings = {
-      schemaVersion: 2 as const,
+      schemaVersion: 4 as const,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'all' as const, confirmedAt: 1 },
       autoSend: true,
-      ignoreOfficial: false,
       hasApiKey: true,
-      batchWindowMs: 2000,
-      requestTimeoutMs: 15000
+      batchWindowMs: 2000
     }
     const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))
     const generate = vi.fn(async () => ({ kind: 'reply' as const, text: 'preserved reply' }))
@@ -262,10 +544,10 @@ describe('OmniMind generated-reply authorization seam', () => {
     await permissions.request('automation')
     const service = new OmniMindService(permissions)
     const settings = {
-      schemaVersion: 2 as const,
+      schemaVersion: 4 as const,
       pythonBaseUrl: 'http://127.0.0.1:8000/api/v1/open',
       managedScope: { mode: 'selected' as const, conversations: [{ sessionId: 'alice', displayName: 'Alice' }] },
-      autoSend, ignoreOfficial: false, hasApiKey: true, batchWindowMs: 2000, requestTimeoutMs: 15000
+      autoSend, hasApiKey: true, batchWindowMs: 2000
     }
     const captureBaseline = vi.fn(async () => undefined)
     const sendText = vi.fn(async () => ({ success: true, sentAt: 1 }))

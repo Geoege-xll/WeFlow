@@ -34,11 +34,7 @@ import {
 import ChatHeader from './Chat/ChatHeader'
 import ChatMessageBubble, { type MessageAvatarProfile } from './Chat/ChatMessageBubble'
 import { OmniMindManualMessageComposer } from '../features/omnimind/OmniMindManualMessageComposer'
-import { omniMindZhCN } from '../features/omnimind/locale'
 import { getOmniMindChatMountPolicy } from '../features/omnimind/chatMountPolicy'
-import { OmniMindQueuePanel } from '../features/omnimind/OmniMindQueuePanel'
-import { useOmniMind } from '../features/omnimind/useOmniMind'
-import { OmniMindHostingActiveModal } from '../features/omnimind/OmniMindHostingActiveModal'
 import { useOmniMindComposerAccountReadiness } from '../features/omnimind/useOmniMindComposerAccountReadiness'
 import { computeChatResponsiveLayout } from './Chat/chatResponsiveLayout'
 import { resolveChatImageFailure } from './Chat/chatImageFailureViewModel'
@@ -101,9 +97,9 @@ const GLOBAL_MSG_SEED_LIMIT = 120
 const GLOBAL_MSG_BACKFILL_CONCURRENCY = 3
 const GLOBAL_MSG_LEGACY_CONCURRENCY = 6
 const GLOBAL_MSG_BACKFILL_RENDER_INTERVAL_MS = 120
-const GLOBAL_MSG_SEARCH_CANCELED_ERROR = '__WEFLOW_GLOBAL_MSG_SEARCH_CANCELED__'
+const GLOBAL_MSG_SEARCH_CANCELED_ERROR = '__OMNIMIND_WECHAT_GLOBAL_MSG_SEARCH_CANCELED__'
 const GLOBAL_MSG_SHADOW_COMPARE_SAMPLE_RATE = 0.2
-const GLOBAL_MSG_SHADOW_COMPARE_STORAGE_KEY = 'weflow.debug.searchShadowCompare'
+const GLOBAL_MSG_SHADOW_COMPARE_STORAGE_KEY = 'omnimind-wechat.debug.searchShadowCompare'
 const MESSAGE_LIST_SCROLL_IDLE_MS = 160
 const MESSAGE_TOP_EDGE_LOAD_COOLDOWN_MS = 160
 const MESSAGE_EDGE_TRIGGER_DISTANCE_PX = 96
@@ -771,11 +767,11 @@ const SESSION_CONTACT_PROFILE_RETRY_INTERVAL_MS = 15 * 1000
 const SESSION_CONTACT_PROFILE_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000
 
 function buildChatSessionListCacheKey(scope: string): string {
-  return `weflow.chat.sessions.v1::${scope || 'default'}`
+  return `omnimind-wechat.chat.sessions.v1::${scope || 'default'}`
 }
 
 function buildChatSessionPreviewCacheKey(scope: string): string {
-  return `weflow.chat.preview.v3::${scope || 'default'}`
+  return `omnimind-wechat.chat.preview.v3::${scope || 'default'}`
 }
 
 function normalizeChatCacheScope(dbPath: unknown, wxid: unknown): string {
@@ -1431,7 +1427,7 @@ const SessionItem = React.memo(function SessionItem({
 }: {
   session: ChatSession
   isActive: boolean
-  onSelect: (session: ChatSession) => void
+  onSelect: (session: ChatSession, trigger?: HTMLDivElement) => void
   formatTime: (timestamp: number) => string
   searchKeyword?: string
 }) {
@@ -1445,7 +1441,7 @@ const SessionItem = React.memo(function SessionItem({
   const handleKeyboardSelect = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onSelect(session)
+      onSelect(session, event.currentTarget)
     }
   }
 
@@ -1457,10 +1453,10 @@ const SessionItem = React.memo(function SessionItem({
         role="option"
         aria-selected={isActive}
         tabIndex={0}
-        onClick={() => onSelect(session)}
+        onClick={(event) => onSelect(session, event.currentTarget)}
         onKeyDown={handleKeyboardSelect}
       >
-        <div className="fold-entry-avatar">
+        <div className="session-list-avatar fold-entry-avatar">
           <MessageSquare size={22} />
         </div>
         <div className="session-info">
@@ -1484,10 +1480,10 @@ const SessionItem = React.memo(function SessionItem({
         role="option"
         aria-selected={isActive}
         tabIndex={0}
-        onClick={() => onSelect(session)}
+        onClick={(event) => onSelect(session, event.currentTarget)}
         onKeyDown={handleKeyboardSelect}
       >
-        <div className="biz-entry-avatar">
+        <div className="session-list-avatar biz-entry-avatar">
           <Newspaper size={22} />
         </div>
         <div className="session-info">
@@ -1533,8 +1529,8 @@ const SessionItem = React.memo(function SessionItem({
       <Avatar
         src={session.avatarUrl}
         name={sessionDisplayName}
-        size={44}
-        className={session.username.includes('@chatroom') ? 'group' : ''}
+        size={40}
+        className={session.username.includes('@chatroom') ? 'group session-list-avatar' : 'session-list-avatar'}
       />
       <div className="session-info">
         <div className="session-top">
@@ -1671,6 +1667,7 @@ function ChatPage(props: ChatPageProps) {
   const sidebarRef = useRef<HTMLElement>(null)
   const chatPageRef = useRef<HTMLDivElement>(null)
   const inspectorTriggerRef = useRef<HTMLButtonElement>(null)
+  const bizEntryTriggerRef = useRef<HTMLDivElement>(null)
   const detailTitleRef = useRef<HTMLHeadingElement>(null)
   const groupMembersTitleRef = useRef<HTMLHeadingElement>(null)
   const groupSummaryTitleRef = useRef<HTMLHeadingElement>(null)
@@ -1713,20 +1710,6 @@ function ChatPage(props: ChatPageProps) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [chatContainerWidth, setChatContainerWidth] = useState(0)
   const [isMarkingAllSessionsRead, setIsMarkingAllSessionsRead] = useState(false)
-  const omniMindApi = useOmniMind()
-  const isHostingActive = omniMindApi.snapshot.runtimeState === 'running' || omniMindApi.snapshot.runtimeState === 'degraded' || omniMindApi.snapshot.runtimeState === 'starting' || omniMindApi.snapshot.runtimeState === 'validating'
-  const [showQueueDrawer, setShowQueueDrawer] = useState(false)
-  const [showHostingActiveModal, setShowHostingActiveModal] = useState(false)
-  const handleOpenHostingModal = useCallback(async () => {
-    if (!isHostingActive) {
-      try {
-        await omniMindApi.enable()
-      } catch (e) {
-        console.warn('[OmniMind] Enable failed:', e)
-      }
-    }
-    setShowHostingActiveModal(true)
-  }, [isHostingActive, omniMindApi])
   const [showDetailPanel, setShowDetailPanel] = useState(false)
   const [showGroupMembersPanel, setShowGroupMembersPanel] = useState(false)
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null)
@@ -1850,6 +1833,20 @@ function ChatPage(props: ChatPageProps) {
   const [inSessionSearchError, setInSessionSearchError] = useState<string | null>(null)
   const [quotedMessageTip, setQuotedMessageTip] = useState('')
   const inSessionSearchRef = useRef<HTMLInputElement>(null)
+  const closeHeaderMoreMenu = useCallback(() => {
+    const trigger = document.querySelector<HTMLButtonElement>('[aria-controls="chat-header-more-menu"][aria-expanded="true"]')
+    trigger?.click()
+  }, [])
+  const closeCompetingChatSurfaces = useCallback((keep?: 'date' | 'search' | 'inspector' | 'more') => {
+    if (keep !== 'date') setShowJumpPopover(false)
+    if (keep !== 'search') setShowInSessionSearch(false)
+    if (keep !== 'inspector') {
+      setShowDetailPanel(false)
+      setShowGroupMembersPanel(false)
+      setShowGroupSummaryPanel(false)
+    }
+    if (keep !== 'more') closeHeaderMoreMenu()
+  }, [closeHeaderMoreMenu])
   const inSessionResultJumpTimerRef = useRef<number | null>(null)
   const inSessionResultJumpRequestSeqRef = useRef(0)
   // 全局消息搜索
@@ -2248,13 +2245,13 @@ function ChatPage(props: ChatPageProps) {
       setShowJumpPopover(false)
       return
     }
+    closeCompetingChatSurfaces('date')
     setJumpPopoverDate(resolveCurrentViewDate())
-    setShowInSessionSearch(false)
     updateJumpPopoverPosition()
     setShowJumpPopover(true)
     requestAnimationFrame(() => updateJumpPopoverPosition())
     void loadJumpCalendarData(currentSessionId)
-  }, [currentSessionId, loadJumpCalendarData, resolveCurrentViewDate, showJumpPopover, updateJumpPopoverPosition])
+  }, [closeCompetingChatSurfaces, currentSessionId, loadJumpCalendarData, resolveCurrentViewDate, showJumpPopover, updateJumpPopoverPosition])
 
   useEffect(() => {
     const unsubscribe = onExportSessionStatus((payload) => {
@@ -3309,10 +3306,9 @@ function ChatPage(props: ChatPageProps) {
       return
     }
     inspectorTriggerRef.current = trigger ?? null
-    setShowDetailPanel(false)
-    setShowGroupSummaryPanel(false)
+    closeCompetingChatSurfaces('inspector')
     setShowGroupMembersPanel(true)
-  }, [closeInspectorPanel, currentSessionId, showGroupMembersPanel, isGroupChatSession])
+  }, [closeCompetingChatSurfaces, closeInspectorPanel, currentSessionId, showGroupMembersPanel, isGroupChatSession])
 
   const toggleGroupSummaryPanel = useCallback((trigger?: HTMLButtonElement) => {
     if (!currentSessionId || !isGroupChatSession(currentSessionId) || !aiGroupSummaryEnabled) return
@@ -3321,10 +3317,9 @@ function ChatPage(props: ChatPageProps) {
       return
     }
     inspectorTriggerRef.current = trigger ?? null
-    setShowDetailPanel(false)
-    setShowGroupMembersPanel(false)
+    closeCompetingChatSurfaces('inspector')
     setShowGroupSummaryPanel(true)
-  }, [aiGroupSummaryEnabled, closeInspectorPanel, currentSessionId, showGroupSummaryPanel, isGroupChatSession])
+  }, [aiGroupSummaryEnabled, closeCompetingChatSurfaces, closeInspectorPanel, currentSessionId, showGroupSummaryPanel, isGroupChatSession])
 
   // 切换详情面板
   const toggleDetailPanel = useCallback((trigger?: HTMLButtonElement) => {
@@ -3333,14 +3328,12 @@ function ChatPage(props: ChatPageProps) {
       return
     }
     inspectorTriggerRef.current = trigger ?? null
-    setShowGroupMembersPanel(false)
-    setShowGroupSummaryPanel(false)
-    setShowQueueDrawer(false)
+    closeCompetingChatSurfaces('inspector')
     setShowDetailPanel(true)
     if (currentSessionId) {
       void loadSessionDetail(currentSessionId)
     }
-  }, [closeInspectorPanel, showDetailPanel, currentSessionId, loadSessionDetail])
+  }, [closeCompetingChatSurfaces, closeInspectorPanel, showDetailPanel, currentSessionId, loadSessionDetail])
 
   useEffect(() => {
     const title = showDetailPanel
@@ -4923,7 +4916,7 @@ function ChatPage(props: ChatPageProps) {
   ])
 
   // 选择会话
-  const handleSelectSession = (session: ChatSession) => {
+  const handleSelectSession = (session: ChatSession, trigger?: HTMLDivElement) => {
     // 点击折叠群入口，切换到折叠群视图
     if (session.username.toLowerCase().includes('placeholder_foldgroup')) {
       setFoldedView(true)
@@ -4931,6 +4924,7 @@ function ChatPage(props: ChatPageProps) {
     }
     // 点击公众号入口，切换到公众号视图
     if (session.username === OFFICIAL_ACCOUNTS_VIRTUAL_ID) {
+      bizEntryTriggerRef.current = trigger ?? null
       setBizView(true)
       setSelectedBizAccount(null) // 切入时默认不选中任何公众号
       return
@@ -5001,7 +4995,7 @@ function ChatPage(props: ChatPageProps) {
   }, [currentSessionId, enrichMessagesWithSenderProfiles, hydrateInSessionSearchResults])
 
   const handleToggleInSessionSearch = useCallback(() => {
-    setShowJumpPopover(false)
+    if (!showInSessionSearch) closeCompetingChatSurfaces('search')
     setShowInSessionSearch(v => {
       if (v) {
         cancelInSessionSearchTasks()
@@ -5014,7 +5008,19 @@ function ChatPage(props: ChatPageProps) {
       }
       return !v
     })
-  }, [cancelInSessionSearchJump, cancelInSessionSearchTasks])
+  }, [cancelInSessionSearchJump, cancelInSessionSearchTasks, closeCompetingChatSurfaces, showInSessionSearch])
+
+  useEffect(() => {
+    const handleMoreTrigger = (event: MouseEvent): void => {
+      const trigger = event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>('[aria-controls="chat-header-more-menu"]')
+        : null
+      if (!trigger || trigger.getAttribute('aria-expanded') !== 'false') return
+      closeCompetingChatSurfaces('more')
+    }
+    document.addEventListener('click', handleMoreTrigger, true)
+    return () => document.removeEventListener('click', handleMoreTrigger, true)
+  }, [closeCompetingChatSurfaces])
 
   // 全局消息搜索
   const globalMsgSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -7801,6 +7807,16 @@ function ChatPage(props: ChatPageProps) {
     const wrapperClass = isSystem ? 'system' : (isSent ? 'sent' : 'received')
     const messageKey = getMessageKey(msg)
     const senderUsername = String(msg.senderUsername || '').trim()
+    const previousSenderUsername = String(prevMsg?.senderUsername || '').trim()
+    const isContinuation = Boolean(
+      prevMsg &&
+      !showDateDivider &&
+      !showTime &&
+      !isSystem &&
+      !isSystemMessage(prevMsg.localType) &&
+      prevMsg.isSend === msg.isSend &&
+      (!isCurrentSessionGroup || isSent || previousSenderUsername === senderUsername)
+    )
     const matchedGroupMember = isCurrentSessionGroup && senderUsername
       ? groupPanelMembers.find((member) => (
         isSameQuotedSenderIdentity(member.username, senderUsername) ||
@@ -7827,6 +7843,7 @@ function ChatPage(props: ChatPageProps) {
           message={msg}
           session={currentSession!}
           showTime={!showDateDivider && showTime}
+          showAvatar={!isContinuation}
           myAvatarUrl={myAvatarUrl}
           myWxid={myWxid}
           isGroupChat={isCurrentSessionGroup}
@@ -7878,8 +7895,7 @@ function ChatPage(props: ChatPageProps) {
   const chatPageStyle = standaloneSessionWindow
     ? undefined
     : {
-        '--chat-session-width': `${responsiveLayout.sessionWidth}px`,
-        '--omnimind-queue-width': `${responsiveLayout.queueWidth}px`
+        '--chat-session-width': `${responsiveLayout.sessionWidth}px`
       } as React.CSSProperties
 
   return (
@@ -7888,7 +7904,7 @@ function ChatPage(props: ChatPageProps) {
       className={`chat-page ${compactHeader ? 'compact-chat-header' : ''} ${standaloneSessionWindow ? 'standalone session-only' : ''}`}
       style={chatPageStyle}
     >
-      {!standaloneSessionWindow && <nav className="omnimind-skip-links" aria-label="OmniMind"><a href="#chat-session-list">{omniMindZhCN.skip.sessions}</a><a href="#chat-message-area">{omniMindZhCN.skip.messages}</a><a href="#omnimind-ai-queue">{omniMindZhCN.skip.queue}</a></nav>}
+      {!standaloneSessionWindow && <nav className="omnimind-skip-links" aria-label="聊天快捷导航"><a href="#chat-session-list">会话列表</a><a href="#chat-message-area">消息内容</a></nav>}
       {/* 自定义删除确认对话框 */}
       {deleteConfirm.show && (
         <div className="delete-confirm-overlay">
@@ -7972,53 +7988,59 @@ function ChatPage(props: ChatPageProps) {
         <div className={`session-header session-header-viewport ${foldedView || bizView ? 'folded' : ''}`}>
           {/* 普通 header */}
           <div className="session-header-panel main-header">
-            <div className="search-row">
-              <div className="search-box expanded">
-                <Search size={14} />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="搜索"
-                  value={searchKeyword}
-                  onChange={(e) => {
-                    handleSearch(e.target.value)
-                    handleGlobalMsgSearch(e.target.value)
-                  }}
-                />
-                {searchKeyword && (
-                  <button className="close-search" onClick={() => { handleCloseSearch(); handleCloseGlobalMsgSearch() }}>
-                    <X size={12} />
-                  </button>
-                )}
+            <div className="sessions-toolbar">
+              {/* 第一行: 全局搜索框 */}
+              <div className="toolbar-row-1">
+                <div className="search-box expanded">
+                  <Search size={14} />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="搜索"
+                    value={searchKeyword}
+                    onChange={(e) => {
+                      handleSearch(e.target.value)
+                      handleGlobalMsgSearch(e.target.value)
+                    }}
+                  />
+                  {searchKeyword && (
+                    <button className="close-search" onClick={() => { handleCloseSearch(); handleCloseGlobalMsgSearch() }}>
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  className="icon-btn refresh-btn"
+                  onClick={handleRefresh}
+                  disabled={isLoadingSessions || isRefreshingSessions}
+                  aria-label="刷新会话"
+                  title="刷新会话"
+                  aria-busy={isLoadingSessions || isRefreshingSessions}
+                >
+                  <RefreshCw size={16} className={(isLoadingSessions || isRefreshingSessions) ? 'spin' : ''} />
+                </button>
+                <button
+                  className="icon-btn refresh-btn mark-read-btn"
+                  onClick={handleMarkAllSessionsRead}
+                  disabled={isMarkingAllSessionsRead || isLoadingSessions || isRefreshingSessions}
+                  title="一键已读"
+                  aria-label="一键已读"
+                  aria-busy={isMarkingAllSessionsRead}
+                >
+                  {isMarkingAllSessionsRead ? <Loader2 size={16} className="spin" /> : <CheckSquare size={16} />}
+                </button>
               </div>
-              <button
-                className="icon-btn refresh-btn"
-                onClick={handleRefresh}
-                disabled={isLoadingSessions || isRefreshingSessions}
-                aria-label="刷新会话"
-                title="刷新会话"
-                aria-busy={isLoadingSessions || isRefreshingSessions}
-              >
-                <RefreshCw size={16} className={(isLoadingSessions || isRefreshingSessions) ? 'spin' : ''} />
-              </button>
-              <button
-                className="icon-btn refresh-btn mark-read-btn"
-                onClick={handleMarkAllSessionsRead}
-                disabled={isMarkingAllSessionsRead || isLoadingSessions || isRefreshingSessions}
-                title="一键已读"
-                aria-label="一键已读"
-                aria-busy={isMarkingAllSessionsRead}
-              >
-                {isMarkingAllSessionsRead ? <Loader2 size={16} className="spin" /> : <CheckSquare size={16} />}
-              </button>
+
             </div>
           </div>
           {/* 折叠群 header */}
           <div className="session-header-panel folded-header">
             <div className="folded-view-header">
-              <button className="icon-btn back-btn" onClick={() => {
+              <button className="icon-btn back-btn" aria-label="返回会话列表" onClick={() => {
+                const shouldRestoreBizEntry = bizView
                 setFoldedView(false)
                 setBizView(false)
+                if (shouldRestoreBizEntry) window.requestAnimationFrame(() => bizEntryTriggerRef.current?.focus())
               }}>
                 <ChevronLeft size={18} />
               </button>
@@ -8219,7 +8241,7 @@ function ChatPage(props: ChatPageProps) {
               )}
 
               {bizView && (
-                  <div style={{ height: '100%', overflowY: 'auto' }}>
+                  <div className="biz-secondary-list">
                     <BizAccountList
                         onSelect={setSelectedBizAccount}
                         selectedUsername={selectedBizAccount?.username}
@@ -8244,12 +8266,9 @@ function ChatPage(props: ChatPageProps) {
                 isGroupChat={isCurrentSessionGroup}
                 standaloneSessionWindow={standaloneSessionWindow}
                 showGroupMembersPanel={showGroupMembersPanel}
-                showGroupSummaryPanel={showGroupSummaryPanel}
                 showJumpPopover={showJumpPopover}
                 showInSessionSearch={showInSessionSearch}
                 showDetailPanel={showDetailPanel}
-                showQueueDrawer={showQueueDrawer}
-                isHostingActive={isHostingActive}
                 aiGroupSummaryEnabled={aiGroupSummaryEnabled}
                 shouldHideStandaloneDetailButton={shouldHideStandaloneDetailButton}
                 isPrivateSnsSupported={isCurrentSessionPrivateSnsSupported}
@@ -8265,7 +8284,6 @@ function ChatPage(props: ChatPageProps) {
                 isRefreshingMessages={isRefreshingMessages}
                 isLoadingMessages={isLoadingMessages}
                 currentSessionId={currentSessionId}
-                compactHeader={compactHeader}
                 jumpCalendarWrapRef={jumpCalendarWrapRef}
                 onTriggerSessionInsight={handleTriggerSessionInsight}
                 onToggleGroupSummaryPanel={toggleGroupSummaryPanel}
@@ -8279,8 +8297,7 @@ function ChatPage(props: ChatPageProps) {
                 onToggleInSessionSearch={handleToggleInSessionSearch}
                 onRefreshMessages={handleRefreshMessages}
                 onToggleDetailPanel={toggleDetailPanel}
-                onToggleQueueDrawer={() => setShowQueueDrawer((prev) => { if (!prev) setShowDetailPanel(false); return !prev })}
-                onOpenHostingModal={handleOpenHostingModal}
+                onBeforeOpenMore={() => closeCompetingChatSurfaces('more')}
               />
               {showJumpPopover && createPortal(
                 <div
@@ -8486,7 +8503,7 @@ function ChatPage(props: ChatPageProps) {
 
               {/* 群成员面板 */}
               {showGroupMembersPanel && isCurrentSessionGroup && (
-                <aside className="detail-panel group-members-panel" aria-modal="false" aria-labelledby="group-members-inspector-title">
+                <aside id="group-members-inspector" className="detail-panel group-members-panel" aria-modal="false" aria-labelledby="group-members-inspector-title">
                   <div className="detail-header">
                     <h4 id="group-members-inspector-title" ref={groupMembersTitleRef} tabIndex={-1}>群成员</h4>
                     <button type="button" className="close-btn" onClick={() => closeInspectorPanel('members')} aria-label="关闭群成员面板">
@@ -8713,7 +8730,7 @@ function ChatPage(props: ChatPageProps) {
 
               {/* 会话详情面板 */}
               {showDetailPanel && (
-                <aside className="detail-panel session-detail-panel" aria-modal="false" aria-labelledby="session-detail-inspector-title">
+                <aside id="session-detail-inspector" className="detail-panel session-detail-panel" aria-modal="false" aria-labelledby="session-detail-inspector-title">
                   <div className="detail-header">
                     <h4 id="session-detail-inspector-title" ref={detailTitleRef} tabIndex={-1}>会话详情</h4>
                     <button type="button" className="close-btn" onClick={() => closeInspectorPanel('detail')} aria-label="关闭会话详情">
@@ -9004,32 +9021,13 @@ function ChatPage(props: ChatPageProps) {
             {standaloneSessionWindow && connectionError && <p className="hint">{connectionError}</p>}
           </div>
         )}
-        {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).composer && currentSession && myWxid && <OmniMindManualMessageComposer
+        {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession), currentSession?.username).composer && currentSession && myWxid && <OmniMindManualMessageComposer
           key={`${myWxid}\u001f${currentSession.username}`}
           accountId={myWxid}
           sessionId={currentSession.username}
+          recoveryActionScope="conversation-only"
         />}
       </main>
-
-      {getOmniMindChatMountPolicy(standaloneSessionWindow, Boolean(currentSession)).queue && <OmniMindQueuePanel
-        currentSessionId={currentSession?.username}
-        onNavigate={navigate}
-        onClose={() => setShowQueueDrawer(false)}
-        onOpenActiveModal={() => setShowHostingActiveModal(true)}
-        isOverlay={true}
-        hidden={!showQueueDrawer}
-      />}
-
-      {showHostingActiveModal && (
-        <OmniMindHostingActiveModal
-          snapshot={omniMindApi.snapshot}
-          loading={omniMindApi.loading}
-          onStop={async () => {
-            await omniMindApi.disable()
-            setShowHostingActiveModal(false)
-          }}
-        />
-      )}
 
       {/* 语音转文字模型下载弹窗 */}
       {showVoiceTranscribeDialog && (
@@ -10121,6 +10119,7 @@ function MessageBubble({
   messageKey,
   session,
   showTime,
+  showAvatar,
   myAvatarUrl,
   myWxid,
   isGroupChat,
@@ -10142,6 +10141,7 @@ function MessageBubble({
   messageKey: string;
   session: ChatSession;
   showTime?: boolean;
+  showAvatar?: boolean;
   myAvatarUrl?: string;
   myWxid?: string;
   isGroupChat?: boolean;
@@ -12798,6 +12798,7 @@ function MessageBubble({
       isGroupChat={isGroupChat}
       resolvedSenderName={resolvedSenderName}
       avatarProfile={avatarProfile}
+      showAvatar={!isSystem && showAvatar !== false}
       isSelectionMode={isSelectionMode}
       isSelected={isSelected}
       onContextMenu={onContextMenu}
@@ -12815,6 +12816,7 @@ const MemoMessageBubble = React.memo(MessageBubble, (prevProps, nextProps) => {
   if (prevProps.message !== nextProps.message) return false
   if (prevProps.messageKey !== nextProps.messageKey) return false
   if (prevProps.showTime !== nextProps.showTime) return false
+  if (prevProps.showAvatar !== nextProps.showAvatar) return false
   if (prevProps.myAvatarUrl !== nextProps.myAvatarUrl) return false
   if (prevProps.myWxid !== nextProps.myWxid) return false
   if (prevProps.isGroupChat !== nextProps.isGroupChat) return false

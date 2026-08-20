@@ -85,7 +85,7 @@
       transform: translateY(-1px);
     }
 
-    .weflow-card-body {
+    .app-card-body {
       display: flex !important;
       flex-direction: row !important;
       align-items: center !important;
@@ -290,7 +290,7 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   }
 
-  .weflow-card-body {
+  .app-card-body {
     position: relative;
     z-index: 1;
     display: flex;
