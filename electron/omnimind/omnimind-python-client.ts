@@ -12,6 +12,8 @@ interface PythonClientDependencies {
   fetch?: typeof fetch
   authCheckTimeoutMs?: number
   chatTransportGuardMs?: number
+  /** canonical_conversation_id（ChatSession.id）只用于 Electron main 的加密路由表，不进入队列快照或 renderer。 */
+  onRouteObserved?: (route: { sessionReference: string; accountId: string; sessionId: string }) => void | Promise<void>
 }
 
 interface ChatInput {
@@ -108,7 +110,7 @@ const isStrictObject = (value: unknown, allowedKeys: readonly string[]): value i
  * 任一条件不满足就丢弃整个正文；尤其不读取 message/detail 作为错误原因，避免把服务端内部
  * 异常、客户消息、画像或 extensions 传播到主进程状态和后续日志。
  */
-const parseSafeOpenChatFailure = async (response: Response): Promise<OmniMindOpenChatFailureCode | undefined> => {
+const parseSafeOpenChatFailure = async (response: Response): Promise<{ errorCode: OmniMindOpenChatFailureCode; sessionReference?: string } | undefined> => {
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.includes('application/json')) return undefined
   const declaredLength = Number(response.headers.get('content-length'))
@@ -133,7 +135,12 @@ const parseSafeOpenChatFailure = async (response: Response): Promise<OmniMindOpe
   if (FAILURE_HTTP_STATUS[errorCode] !== response.status) return undefined
   if (!isStrictObject(data.handoff, ERROR_HANDOFF_KEYS)) return undefined
   if (data.handoff.required !== true || data.handoff.status !== 'recommended' || data.handoff.reason !== errorCode) return undefined
-  return errorCode
+  return {
+    errorCode,
+    ...(typeof data.canonical_conversation_id === 'string' && data.canonical_conversation_id.trim()
+      ? { sessionReference: data.canonical_conversation_id.trim() }
+      : {})
+  }
 }
 
 const classifySafeOpenChatFailure = (status: number, errorCode?: OmniMindOpenChatFailureCode): Exclude<GenerationResult['kind'], 'reply'> => {
@@ -291,11 +298,13 @@ export class OmniMindPythonClient {
   private readonly fetchImpl: typeof fetch
   private readonly authCheckTimeoutMs: number
   private readonly chatTransportGuardMs: number
+  private readonly onRouteObserved?: PythonClientDependencies['onRouteObserved']
 
   constructor(dependencies: PythonClientDependencies = {}) {
     this.fetchImpl = dependencies.fetch ?? fetch
     this.authCheckTimeoutMs = dependencies.authCheckTimeoutMs ?? AUTH_CHECK_TIMEOUT_MS
     this.chatTransportGuardMs = dependencies.chatTransportGuardMs ?? CHAT_TRANSPORT_GUARD_MS
+    this.onRouteObserved = dependencies.onRouteObserved
   }
 
   async check(baseUrl: string, apiKey: string): Promise<{ success: boolean; kind?: string }> {
@@ -326,7 +335,10 @@ export class OmniMindPythonClient {
       headers: this.headers(input.apiKey, idempotencyKey, input.clientRequestId),
       body: JSON.stringify(body)
     }, this.chatTransportGuardMs)
-    if (!response.ok) return { kind: response.kind, ...(response.error ? { error: response.error } : {}) }
+    if (!response.ok) {
+      if (response.sessionReference) await this.observeRoute(input, response.sessionReference)
+      return { kind: response.kind, ...(response.error ? { error: response.error } : {}) }
+    }
     let payload: unknown
     try { payload = JSON.parse(await response.response.text()) } catch { return { kind: 'malformed' } }
     if (!payload || typeof payload !== 'object') return { kind: 'malformed' }
@@ -336,6 +348,9 @@ export class OmniMindPythonClient {
       ? record.data as Record<string, unknown>
       : undefined
     if (!data || typeof data.operation_id !== 'string' || !data.operation_id) return { kind: 'malformed' }
+    if (typeof data.canonical_conversation_id === 'string' && data.canonical_conversation_id.trim()) {
+      await this.observeRoute(input, data.canonical_conversation_id.trim())
+    }
     const status = typeof data.status === 'string' ? data.status.toLowerCase() : ''
     // 202 是服务端已接受且仍在处理的权威状态，不是损坏响应。队列若由用户显式对账，
     // 会使用完全相同的消息事实重新派生同一个 Idempotency-Key，而不会创建第二次模型操作。
@@ -365,6 +380,15 @@ export class OmniMindPythonClient {
     return text ? { kind: 'reply', text } : { kind: 'empty' }
   }
 
+  private async observeRoute(input: ChatInput, sessionReference: string): Promise<void> {
+    try {
+      await this.onRouteObserved?.({ sessionReference, accountId: input.accountId, sessionId: input.sessionId })
+    } catch {
+      // 路由 journal 失败不能把已通过质量门的普通回复改写为异常，更不能把存储错误正文暴露给队列。
+      // 后续 Delivery 因缺少本地路由证明会保持未认领，安全地留在坐席工作台处理。
+    }
+  }
+
   // 开放通道使用独立 API Key，并只在 chat 上附加幂等/链路头，避免把 omni_* 误当 JWT。
   private headers(apiKey: string, idempotencyKey?: string, clientRequestId?: string): Record<string, string> {
     return {
@@ -375,17 +399,21 @@ export class OmniMindPythonClient {
     }
   }
 
-  private async request(url: string, init: RequestInit, timeoutMs: number): Promise<{ ok: true; response: Response } | { ok: false; kind: Exclude<GenerationResult['kind'], 'reply'>; error?: string }> {
+  private async request(url: string, init: RequestInit, timeoutMs: number): Promise<{ ok: true; response: Response } | { ok: false; kind: Exclude<GenerationResult['kind'], 'reply'>; error?: string; sessionReference?: string }> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const response = await this.fetchImpl(url, { ...init, signal: controller.signal })
       if (!response.ok) {
-        const errorCode = await parseSafeOpenChatFailure(response)
-        const kind = classifySafeOpenChatFailure(response.status, errorCode)
+        const safeFailure = await parseSafeOpenChatFailure(response)
+        const kind = classifySafeOpenChatFailure(response.status, safeFailure?.errorCode)
         // 只允许已验证的公开失败码进入队列；普通 HTTPException detail、服务端 message 与
         // 未知响应正文全部丢弃。通用状态只返回本地 kind，不附加可被显示/记录的正文。
-        return { ok: false, kind, ...(errorCode ? { error: errorCode } : {}) }
+        return {
+          ok: false,
+          kind,
+          ...(safeFailure ? { error: safeFailure.errorCode, ...(safeFailure.sessionReference ? { sessionReference: safeFailure.sessionReference } : {}) } : {})
+        }
       }
       return { ok: true, response }
     } catch {

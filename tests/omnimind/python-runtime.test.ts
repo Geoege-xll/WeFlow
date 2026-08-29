@@ -208,6 +208,25 @@ describe('OmniMindPythonClient', () => {
     await expect(client.chat(privateInput)).resolves.toEqual({ kind: 'handoff' })
   })
 
+  it('把 canonical_conversation_id 旁路写入本地路由回调，但阻断正文绝不成为可发送 reply', async () => {
+    const blocked = completed('抱歉，当前信息不足以安全回答，已为您转交人工处理。')
+    blocked.data.operation_id = 'operation-for-recovery'
+    blocked.data.handoff = { required: true, status: 'none', reason: null }
+    const onRouteObserved = vi.fn(async () => undefined)
+    const client = new OmniMindPythonClient({
+      fetch: vi.fn(async () => new Response(JSON.stringify(blocked), { status: 200 })),
+      chatTransportGuardMs: 10,
+      onRouteObserved
+    })
+
+    await expect(client.chat(privateInput)).resolves.toEqual({ kind: 'handoff' })
+    expect(onRouteObserved).toHaveBeenCalledWith({
+      sessionReference: 'conversation-1',
+      accountId: 'wxid-owner',
+      sessionId: 'wxid-customer'
+    })
+  })
+
   it('发送渠道中立信封、逐消息事实和稳定幂等头，且绝不传原始 messageKey', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(completed()), { status: 200 }))
     const client = new OmniMindPythonClient({ fetch: fetchMock, chatTransportGuardMs: 10 })

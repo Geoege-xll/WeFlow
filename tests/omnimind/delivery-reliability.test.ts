@@ -221,6 +221,32 @@ describe('OmniMind delivery reliability', () => {
     })
   })
 
+  it('恢复投递只输出摘要后的 providerMessageId，验证不确定时返回 result_unknown', async () => {
+    const confirmed = new UnifiedSender({
+      cancelForManualSend: () => [],
+      adapter: { sendText: async () => ({ success: true, sentAt: 1 }) },
+      verifier: {
+        captureBaseline: async () => undefined,
+        verify: async () => ({ success: true, verifiedMessageKey: 'private-wcdb-message-key' })
+      }
+    })
+    const control = { onAcquire: vi.fn(), isCancelled: () => false, authorize: async () => undefined }
+    const receipt = await confirmed.sendRecoveryDelivery({ accountId: 'a', sessionId: 's', text: 'reply' }, control)
+    expect(receipt).toMatchObject({ result: 'confirmed_sent' })
+    expect(receipt).not.toHaveProperty('verifiedMessageKey')
+    expect(JSON.stringify(receipt)).not.toContain('private-wcdb-message-key')
+    expect(receipt.result === 'confirmed_sent' ? receipt.providerMessageId : '').toMatch(/^sha256:[a-f0-9]{64}$/)
+
+    const uncertain = new UnifiedSender({
+      cancelForManualSend: () => [],
+      adapter: { sendText: async () => ({ success: true, sentAt: 1 }) },
+      verifier: { captureBaseline: async () => undefined, verify: async () => ({ success: false, error: 'outbound_not_verified' }) }
+    })
+    await expect(uncertain.sendRecoveryDelivery({ accountId: 'a', sessionId: 's', text: 'reply' }, control)).resolves.toEqual({
+      result: 'result_unknown', failureCode: 'wechat_send_result_unknown'
+    })
+  })
+
   it('converts a thrown post-send read into delivery uncertainty', async () => {
     const sender = new UnifiedSender({
       cancelForManualSend: () => [],

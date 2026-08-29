@@ -46,6 +46,40 @@ export interface OmniMindSendResult {
   stage?: OmniMindFailureStage
 }
 
+/**
+ * Open Recovery Delivery 只允许连接器消费这一组最小字段。
+ *
+ * routeReference/sessionReference 都是 OmniMind 服务端生成的内部 UUID；公开合同刻意不含
+ * 微信 sessionId、渠道回执、异常正文或服务端错误详情。真正的本地微信路由只保存在
+ * safeStorage 加密的主进程 journal 中，绝不穿过 preload/renderer 边界。
+ */
+export interface OpenRecoveryDeliveryItem {
+  deliveryId: string
+  fulfillmentId: string
+  attemptNumber: number
+  parentDeliveryId?: string
+  sessionReference: string
+  routeReference: string
+  content: string
+  status: 'queued'
+}
+
+export interface OpenRecoveryDeliveryStatus {
+  deliveryId: string
+  fulfillmentId: string
+  attemptNumber: number
+  parentDeliveryId?: string
+  status: 'queued' | 'claimed' | 'acknowledged' | 'failed' | 'result_unknown'
+  result: 'pending' | 'confirmed_sent' | 'not_sent' | 'result_unknown'
+}
+
+export interface OpenRecoveryDeliveryClaim {
+  deliveryId: string
+  leaseToken: string
+  leaseExpiresAt: string
+  fencingToken: number
+}
+
 export type { ManagedConversation, ManagedScope } from './conversation-domain'
 export { isManagedSession, parseManagedScope } from './conversation-domain'
 import type { ManagedScope } from './conversation-domain'

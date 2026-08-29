@@ -12,6 +12,8 @@ import { normalizedMessageEventHub } from './normalized-message-event-hub'
 import { OmniMindController } from './omnimind-controller'
 import { OmniMindPythonClient } from './omnimind-python-client'
 import { OmniMindRuntime } from './omnimind-runtime'
+import { OpenChannelDeliveryClient, OpenRecoveryDeliveryLoop } from './open-channel-delivery-client'
+import { PersistentDeliveryJournal } from './persistent-delivery-journal'
 import { SecureOmniMindSettingsStore } from './secure-settings-store'
 import { UnifiedSender } from './unified-sender'
 import { AccountSwitchCoordinator } from './account-switch-coordinator'
@@ -25,8 +27,10 @@ const execFileAsync = promisify(execFile)
 
 export class OmniMindService {
   private readonly config = ConfigService.getInstance()
-  private readonly python = new OmniMindPythonClient()
+  private readonly python: OmniMindPythonClient
   private readonly store: SecureOmniMindSettingsStore
+  private readonly deliveryJournal: PersistentDeliveryJournal
+  private readonly deliveryLoop: OpenRecoveryDeliveryLoop
   private readonly sender: UnifiedSender
   private readonly controller: OmniMindController
   private readonly runtime: OmniMindRuntime
@@ -56,26 +60,66 @@ export class OmniMindService {
    */
   private settingsMutationTail: Promise<void> = Promise.resolve()
   private startOperation?: Promise<OmniMindSnapshot>
+  /** 最近一次完整启动预检实际验证过的 Open API 基址；只在同一次 runtime account 上使用。 */
+  private validatedPythonBaseUrl?: string
 
   constructor(permissionService?: MacOsPermissionService) {
     const settingsDirectory = path.join(app.getPath('userData'), 'omnimind')
+    const writePrivateFileAtomic = async (target: string, value: string): Promise<void> => {
+      // 目录与临时文件都显式收紧权限；rename 后目标继承临时文件 0600，不依赖用户 umask。
+      await fs.mkdir(settingsDirectory, { recursive: true, mode: 0o700 })
+      // Windows ACL 不等价于 POSIX chmod；该平台由用户目录 ACL 隔离，避免强行 chmod 触发 EPERM。
+      if (process.platform !== 'win32') await fs.chmod(settingsDirectory, 0o700)
+      const temporary = path.join(settingsDirectory, `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`)
+      let renamed = false
+      try {
+        await fs.writeFile(temporary, value, { encoding: 'utf8', mode: 0o600 })
+        await fs.rename(temporary, target)
+        renamed = true
+      } finally {
+        // rename 成功后临时路径已不存在；失败则尽力清理密文临时文件，原始错误仍向上抛出。
+        if (!renamed) {
+          try { await fs.unlink(temporary) } catch { /* 写入失败时临时文件可能尚未创建。 */ }
+        }
+      }
+    }
     this.store = new SecureOmniMindSettingsStore({
       safeStorage,
       read: async (key) => {
         try { return await fs.readFile(path.join(settingsDirectory, `${key}.json`), 'utf8') } catch { return undefined }
       },
       writeAtomic: async (key, value) => {
-        await fs.mkdir(settingsDirectory, { recursive: true })
         const target = path.join(settingsDirectory, `${key}.json`)
-        const temporary = path.join(settingsDirectory, `.${key}.${process.pid}.tmp`)
-        await fs.writeFile(temporary, value, { encoding: 'utf8', mode: 0o600 })
-        await fs.rename(temporary, target)
+        await writePrivateFileAtomic(target, value)
       },
       remove: async (key) => {
         try { await fs.unlink(path.join(settingsDirectory, `${key}.json`)) } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
         }
       }
+    })
+    const deliveryJournalPath = path.join(settingsDirectory, 'open-recovery-delivery-journal.json')
+    this.deliveryJournal = new PersistentDeliveryJournal({
+      safeStorage,
+      read: async () => {
+        try { return await fs.readFile(deliveryJournalPath, 'utf8') } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+          throw error
+        }
+      },
+      writeAtomic: (value) => writePrivateFileAtomic(deliveryJournalPath, value),
+      quarantine: async () => {
+        // 损坏文件只改名隔离，不读取或记录密文/正文；下一次写入会创建新的完整 journal。
+        try {
+          await fs.rename(deliveryJournalPath, path.join(settingsDirectory, `open-recovery-delivery-journal.corrupt.${Date.now()}.json`))
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+    })
+    this.python = new OmniMindPythonClient({
+      onRouteObserved: ({ sessionReference, accountId, sessionId }) =>
+        this.deliveryJournal.recordRoute(sessionReference, accountId, sessionId)
     })
     this.permissions = permissionService ?? new MacOsPermissionService({
       platform: process.platform,
@@ -106,6 +150,22 @@ export class OmniMindService {
       adapter,
       verifier: new WcdbOutboundVerifier(chatService),
       recordDiagnostic: (entry) => diagnostics.record(entry)
+    })
+    this.deliveryLoop = new OpenRecoveryDeliveryLoop({
+      client: new OpenChannelDeliveryClient(),
+      journal: this.deliveryJournal,
+      send: async (input, control) => {
+        let sessions: Awaited<ReturnType<typeof chatService.getSessions>>
+        try { sessions = await chatService.getSessions() } catch {
+          return { result: 'not_sent', failureCode: 'conversation_title_unavailable' }
+        }
+        const title = sessions.success && Array.isArray(sessions.sessions)
+          ? String(sessions.sessions.find((candidate) => candidate.username === input.sessionId)?.displayName || '').trim()
+          : ''
+        if (!title) return { result: 'not_sent', failureCode: 'conversation_title_unavailable' }
+        return this.sender.sendRecoveryDelivery({ ...input, conversationTitle: title }, control)
+      },
+      authorize: (accountId, sessionId) => this.authorizeRecoveryDelivery(accountId, sessionId)
     })
     this.controller = new OmniMindController({
       hub: normalizedMessageEventHub,
@@ -155,6 +215,7 @@ export class OmniMindService {
     this.accountSwitcher = new AccountSwitchCoordinator({
       stopIngress: async () => {
         this.ingressEnabled = false
+        await this.stopRecoveryDeliveryLoop()
         this.controller.stop()
         await this.stopActiveSubscriber()
       },
@@ -233,6 +294,7 @@ export class OmniMindService {
     // 关键设置变化对 paused 同样 fail closed：先封住新 ingress 和 subscriber，再执行正式停止/取消，
     // 保存完成后保持 stopped，用户之后必须重新显式启动并通过完整预检。
     this.ingressEnabled = false
+    await this.stopRecoveryDeliveryLoop()
     this.controller.stop()
     normalizedMessageEventHub.reset()
     await this.stopActiveSubscriber()
@@ -269,6 +331,7 @@ export class OmniMindService {
   async disable(): Promise<OmniMindSnapshot> {
     return this.runLifecycleCommand(async () => {
       this.ingressEnabled = false
+      await this.stopRecoveryDeliveryLoop()
       this.controller.stop()
       normalizedMessageEventHub.reset()
       await this.stopActiveSubscriber()
@@ -337,6 +400,35 @@ export class OmniMindService {
   }
 
   /**
+   * Deferred Delivery 不复用 managedScope 判断：这是坐席已经在工作台明确批准的后续答复，
+   * 但仍必须在真正取得 sender mutex 后复核 runtime、账号、系统权限和唯一会话标题。
+   */
+  private async authorizeRecoveryDelivery(accountId: string, sessionId: string): Promise<{ success: false; error: string } | undefined> {
+    if (this.runtime.getState() !== 'running') return { success: false, error: 'runtime_not_running' }
+    const currentAccountId = String(this.config.get('myWxid') || '').trim()
+    if (!currentAccountId || currentAccountId !== accountId || this.runtime.getAccountId() !== accountId) {
+      return { success: false, error: 'current_account_changed' }
+    }
+    const permissionFailure = await this.permissions.authorizeAction()
+    if (permissionFailure) {
+      if (permissionFailure.error === 'accessibility_permission_denied' || permissionFailure.error === 'automation_permission_denied') {
+        this.runtime.degrade(permissionFailure.error)
+        this.ingressEnabled = false
+        // stop() 在进入第一个 await 前就递增 epoch 并取消 fetch；此处不能等待自身 inFlight，
+        // 否则 sender 授权回调会和 Delivery Loop 形成自等待。
+        void this.stopRecoveryDeliveryLoop()
+        void this.stopActiveSubscriber()
+      }
+      return permissionFailure
+    }
+    let sessions: Awaited<ReturnType<typeof chatService.getSessions>>
+    try { sessions = await chatService.getSessions() } catch { return { success: false, error: 'conversation_title_unavailable' } }
+    if (!sessions.success || !Array.isArray(sessions.sessions)) return { success: false, error: 'conversation_title_unavailable' }
+    const title = String(sessions.sessions.find((candidate) => candidate.username === sessionId)?.displayName || '').trim()
+    return this.authorizeUniqueConversationTarget(sessionId, title)
+  }
+
+  /**
    * WeChat 4.x 发送采用快捷键搜索后选择首项。因为不能从 AX 子树可靠地识别结果，
    * 必须在共享 sender mutex 已取得后，用新鲜会话列表确认“搜索词 -> sessionId”仍是唯一映射。
    * trim 后使用 locale-aware 小写比较，联系人与群聊不做类型区分；同名一律 fail closed。
@@ -382,6 +474,7 @@ export class OmniMindService {
     const accountId = String(this.config.get('myWxid') || '').trim()
     if (!accountId || !this.config.get('dbPath') || !this.config.get('decryptKey')) return { success: false, error: 'database_not_ready' }
     const settings = await this.store.getRendererSettings()
+    this.validatedPythonBaseUrl = settings.pythonBaseUrl
     this.managedScope = settings.managedScope
     this.autoSend = settings.autoSend
     this.batchWindowMs = settings.batchWindowMs
@@ -441,6 +534,26 @@ export class OmniMindService {
       return
     }
     if (!this.runtime.completeStart()) await this.stopIngressPreservingQueue()
+    else await this.startRecoveryDeliveryLoop()
+  }
+
+  private async startRecoveryDeliveryLoop(): Promise<void> {
+    const accountId = this.runtime.getAccountId()
+    const baseUrl = this.validatedPythonBaseUrl
+    if (this.runtime.getState() !== 'running' || !accountId || !baseUrl) return
+    try {
+      const apiKey = await this.store.getApiKey()
+      if (!apiKey || this.runtime.getState() !== 'running' || this.runtime.getAccountId() !== accountId) return
+      this.deliveryLoop.start({ baseUrl, apiKey, accountId })
+    } catch {
+      // 凭据或安全存储不可用时不启动轮询；既有入站自动托管状态不伪装成 Delivery 成功。
+    }
+  }
+
+  private stopRecoveryDeliveryLoop(): Promise<void> {
+    // 少数既有边界单测用 Object.create 构造只含被测依赖的 Service harness；生产构造器始终
+    // 注入 deliveryLoop。这里保持停止命令向后兼容，同时不降低真实实例的生命周期保证。
+    return (this.deliveryLoop as OpenRecoveryDeliveryLoop | undefined)?.stop() ?? Promise.resolve()
   }
 
   /**
@@ -477,6 +590,7 @@ export class OmniMindService {
     // 权限预检也会复用 authorizeNativeSend。若 runtime 尚未真实建立 subscriber，
     // 这里只需关闭 controller 闸门；不得为“本来就未启动”的订阅额外发送 false 通知。
     // 该判断也使重复权限失败与重复 pause 保持幂等，真实 running/paused 转换仍各通知一次。
+    await this.stopRecoveryDeliveryLoop()
     return this.stopActiveSubscriber()
   }
 

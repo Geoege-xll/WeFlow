@@ -1,9 +1,14 @@
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import type { OmniMindFailureStage, OmniMindSendResult } from '../../shared/omnimind/contracts'
 import type { DeliveryDiagnosticInput } from './delivery-diagnostics'
 
 export type SendPriority = 'manual' | 'auto'
 export type SendResult = OmniMindSendResult
+export type RecoverySendResult =
+  | { result: 'confirmed_sent'; providerMessageId: string }
+  | { result: 'not_sent'; failureCode: string }
+  | { result: 'result_unknown'; failureCode: string }
+interface InternalSendResult extends OmniMindSendResult { verifiedMessageKey?: string }
 type TransactionDiagnosticInput = Omit<DeliveryDiagnosticInput, 'correlationId'>
 
 interface Waiter<T> { priority: SendPriority; operation: () => Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void }
@@ -76,13 +81,50 @@ export class UnifiedSender {
       isCancelled: () => false,
       authorize,
       onAuthorized: () => { this.dependencies.cancelForManualSend(input.accountId, input.sessionId) }
-    })
+    }).then(({ verifiedMessageKey: _privateReceipt, ...result }) => result)
   }
 
   sendAutomatic(
     input: { accountId: string; sessionId: string; conversationTitle?: string; text: string },
     control: { onAcquire: () => void; isCancelled: () => boolean; authorize?: () => Promise<{ success: false; error: string } | undefined>; onAuthorized?: () => void } = { onAcquire: () => undefined, isCancelled: () => false }
   ): Promise<SendResult> {
+    return this.sendAutomaticInternal(input, control)
+      .then(({ verifiedMessageKey: _privateReceipt, ...result }) => result)
+  }
+
+  /**
+   * 已审核恢复投递与普通自动回复共用同一个 mutex、授权回调和渠道验证器。
+   * 唯一差异是本方法在 Electron main 内把 WCDB messageKey 摘要成稳定 providerMessageId，
+   * 供服务端 ACK 幂等使用；原始 key 绝不进入公开合同、renderer、日志或 journal。
+   */
+  sendRecoveryDelivery(
+    input: { accountId: string; sessionId: string; conversationTitle?: string; text: string },
+    control: { onAcquire: () => void; isCancelled: () => boolean; authorize: () => Promise<{ success: false; error: string } | undefined> }
+  ): Promise<RecoverySendResult> {
+    return this.sendAutomaticInternal(input, control).then((result) => {
+      if (result.success && result.verifiedMessageKey) {
+        return {
+          result: 'confirmed_sent' as const,
+          providerMessageId: `sha256:${createHash('sha256').update(result.verifiedMessageKey, 'utf8').digest('hex')}`
+        }
+      }
+      // adapter 可能已执行动作但 WCDB 无法确认，此时 UnifiedSender 固定使用 verification_postsend；
+      // 该状态必须对账为 result_unknown，绝不能因为 success=false 自动重发。
+      if (result.success || result.stage === 'verification_postsend') {
+        return { result: 'result_unknown' as const, failureCode: 'wechat_send_result_unknown' }
+      }
+      const localCode = String(result.error || 'wechat_not_sent').trim().toLowerCase()
+      return {
+        result: 'not_sent' as const,
+        failureCode: /^[a-z0-9_]{1,64}$/.test(localCode) ? localCode : 'wechat_not_sent'
+      }
+    })
+  }
+
+  private sendAutomaticInternal(
+    input: { accountId: string; sessionId: string; conversationTitle?: string; text: string },
+    control: { onAcquire: () => void; isCancelled: () => boolean; authorize?: () => Promise<{ success: false; error: string } | undefined>; onAuthorized?: () => void } = { onAcquire: () => undefined, isCancelled: () => false }
+  ): Promise<InternalSendResult> {
     const command = {
       accountId: input.accountId,
       sessionId: input.sessionId,
@@ -95,7 +137,9 @@ export class UnifiedSender {
       onAcquire: () => {
         command.acquired = true
         control.onAcquire()
-      }, authorize: control.authorize
+      },
+      authorize: control.authorize,
+      onAuthorized: control.onAuthorized
     }).finally(() => this.pendingAutomatic.delete(command))
   }
 
@@ -104,8 +148,8 @@ export class UnifiedSender {
   private send(
     priority: SendPriority,
     input: { accountId: string; sessionId: string; conversationTitle?: string; text: string },
-    control: { onAcquire: () => void; isCancelled: () => boolean; authorize?: () => Promise<{ success: false; error: string } | undefined> } = { onAcquire: () => undefined, isCancelled: () => false }
-  ): Promise<SendResult> {
+    control: { onAcquire: () => void; isCancelled: () => boolean; authorize?: () => Promise<{ success: false; error: string } | undefined>; onAuthorized?: () => void } = { onAcquire: () => undefined, isCancelled: () => false }
+  ): Promise<InternalSendResult> {
     return this.mutex.run(priority, async () => {
       const correlationId = this.dependencies.createCorrelationId?.() ?? randomUUID()
       if (control.isCancelled()) return { success: false, error: 'cancelled_before_sending' }
@@ -151,7 +195,9 @@ export class UnifiedSender {
         ...(!verified.success ? [{ stage: 'verification_postsend' as const, terminalState, reason: verified.error ?? 'outbound_not_verified' }] : []),
         ...(sent.cleanupWarnings ?? []).map((reason) => ({ stage: 'cleanup' as const, terminalState, reason }))
       ])
-      return verified.success ? { success: true } : { ...verified, stage: 'verification_postsend' }
+      return verified.success
+        ? { success: true, ...(verified.verifiedMessageKey ? { verifiedMessageKey: verified.verifiedMessageKey } : {}) }
+        : { ...verified, stage: 'verification_postsend' }
     })
   }
 
